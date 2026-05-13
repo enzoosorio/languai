@@ -23,15 +23,16 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 1 — Backend skeleton (Supabase)
 
-- [ ] **1.1** 📦 Crear proyecto en Supabase. Guardar URL + anon key en `.env.local` (no commitear). Documentar variables en `.env.example`.
-- [ ] **1.2** 🗄️ Habilitar extensiones `pgvector` y `pgcrypto` en Supabase SQL editor.
-- [ ] **1.3** 🗄️ Crear migración SQL `001_sessions.sql` con tablas `sessions`, `session_turns` según [ARCHITECTURE.md](ARCHITECTURE.md). Aplicarla.
-- [ ] **1.4** 🗄️ Crear migración SQL `002_feedback.sql` con `feedback_annotations`, `tracked_items` (incluye `user_rejections int default 0`), `deep_dive_sessions`. Aplicarla.
-- [ ] **1.5** 🗄️ Crear migración SQL `003_settings.sql` con `user_settings` (incluye `native_language`, `languages_config jsonb`, `onboarding_completed`), `user_streaks`, `user_facts`, `roleplay_topic_batches`. Aplicarla.
-- [ ] **1.6** 🗄️ Crear vista materializada `session_analytics` (ver [ARCHITECTURE.md](ARCHITECTURE.md)). Aplicarla.
-- [ ] **1.7** 🗄️ Configurar Row Level Security: solo el `user_id` ve sus filas en todas las tablas.
-- [ ] **1.8** 📦 Crear cliente Supabase en `src/lib/supabase.ts` con tipos auto-generados (`supabase gen types typescript`).
-- [ ] **1.9** 🧠 Scaffold de Edge Function `chat-turn` (Deno) que solo hace echo del request, deployada y llamable desde la app. Verificar.
+- [x] **1.1** 📦 Crear proyecto en Supabase. Guardar URL + anon key en `.env.local` (no commitear). Documentar variables en `.env.example`.
+- [x] **1.2** 🗄️ Habilitar extensiones `pgvector` y `pgcrypto` en Supabase SQL editor.
+- [x] **1.3** 🗄️ Crear migración SQL `001_sessions.sql` con tablas `sessions`, `session_turns` según [ARCHITECTURE.md](ARCHITECTURE.md). Aplicarla.
+- [x] **1.4** 🗄️ Crear migración SQL `002_feedback.sql` con `feedback_annotations`, `tracked_items` (incluye `user_rejections int default 0`), `deep_dive_sessions`. Aplicarla.
+- [x] **1.5** 🗄️ Crear migración SQL `003_settings.sql` con `user_settings` (incluye `native_language`, `languages_config jsonb`, `onboarding_completed`), `user_streaks`, `user_facts`, `roleplay_topic_batches`. Aplicarla.
+- [x] **1.6** 🗄️ Crear vista materializada `session_analytics` (ver [ARCHITECTURE.md](ARCHITECTURE.md)). Aplicarla.
+- [x] **1.7** 🗄️ Configurar Row Level Security: solo el `user_id` ve sus filas en todas las tablas.
+- [x] **1.8** 📦 Crear cliente Supabase en `src/lib/supabase.ts` con tipos auto-generados (`supabase gen types typescript`).
+- [x] **1.9** 🧠 Scaffold de Edge Function `chat-turn` (Deno) que solo hace echo del request, deployada y llamable desde la app. Verificar.
+
 
 ## Fase 2 — App shell, theming y navegación por swipe
 
