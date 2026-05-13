@@ -15,11 +15,11 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 0 — Fundación del repo
 
-- [ ] **0.1** 📦 `git init` + `.gitignore` (node_modules, .env, .expo, ios/, android/build) + commit inicial con los specs actuales (incluye el nuevo `COSTS.md`).
-- [ ] **0.2** 📦 Inicializar proyecto Expo con TypeScript (`npx create-expo-app@latest --template`). Verificar `expo start` en simulador o Expo Go.
-- [ ] **0.3** 📦 Instalar dependencias base: Zustand, NativeWind + Tailwind, expo-av, expo-haptics, expo-blur, react-native-reanimated, react-native-gesture-handler.
-- [ ] **0.4** 📦 Crear estructura de carpetas: `src/{screens,components,stores,services,hooks,lib,types,theme}`. Añadir `README.md` con instrucciones de arranque.
-- [ ] **0.5** 📦 Configurar ESLint + Prettier + path aliases (`@/*` → `src/*`) en `tsconfig.json` y `babel.config.js`.
+- [x] **0.1** 📦 `git init` + `.gitignore` (node_modules, .env, .expo, ios/, android/build) + commit inicial con los specs actuales (incluye el nuevo `COSTS.md`).
+- [x] **0.2** 📦 Inicializar proyecto Expo con TypeScript (`npx create-expo-app@latest --template`). Verificar `expo start` en simulador o Expo Go.
+- [x] **0.3** 📦 Instalar dependencias base: Zustand, NativeWind + Tailwind, expo-av, expo-haptics, expo-blur, react-native-reanimated, react-native-gesture-handler.
+- [x] **0.4** 📦 Crear estructura de carpetas: `src/{screens,components,stores,services,hooks,lib,types,theme}`. Añadir `README.md` con instrucciones de arranque.
+- [x] **0.5** 📦 Configurar ESLint + Prettier + path aliases (`@/*` → `src/*`) en `tsconfig.json` y `babel.config.js`.
 
 ## Fase 1 — Backend skeleton (Supabase)
 
