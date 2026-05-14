@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:\\\\Users\\\\enzoo\\\\.claude\\\\plugins\\\\claude-plugins-official\")"
+    ]
+  }
+}
