@@ -34,6 +34,56 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [x] **1.9** 🧠 Scaffold de Edge Function `chat-turn` (Deno) que solo hace echo del request, deployada y llamable desde la app. Verificar.
 
 
+## Fase 1.5 — RLS: verificación y hardening de seguridad
+
+> **Contexto:** El cliente usa la `anon key` (publishable). El único escudo entre un usuario y los datos de otro es el RLS. Esta fase verifica que todas las tablas y objetos estén correctamente protegidos antes de conectar la app al backend real.
+
+### Estado del RLS — post hardening (migraciones 003, 004, 005)
+
+| Objeto | RLS | Patrón aplicado | Estado |
+|---|---|---|---|
+| `profiles` | ✅ | SELECT + UPDATE con `(SELECT auth.uid())` + `TO authenticated` | ✅ |
+| `user_settings` | ✅ | SELECT + UPDATE con `(SELECT auth.uid())` + `TO authenticated` | ✅ |
+| `user_streaks` | ✅ | SELECT + UPDATE con `(SELECT auth.uid())` + `TO authenticated` | ✅ |
+| `sessions` | ✅ | SELECT + INSERT + UPDATE con `(SELECT auth.uid())` + `TO authenticated` | ✅ |
+| `session_turns` | ✅ | SELECT + INSERT via subquery cacheada + `TO authenticated` | ✅ |
+| `tracked_items` | ✅ | SELECT + UPDATE con `(SELECT auth.uid())` + `TO authenticated` | ✅ |
+| `feedback_annotations` | ✅ | SELECT via JOIN (más eficiente que IN/IN anidado) + `TO authenticated` | ✅ |
+| `deep_dive_sessions` | ✅ | SELECT via subquery cacheada + `TO authenticated` | ✅ |
+| `user_facts` | ✅ | SELECT con `(SELECT auth.uid())` + `TO authenticated` | ✅ |
+| `roleplay_topic_batches` | ✅ | SELECT con `(SELECT auth.uid())` + `TO authenticated` | ✅ |
+| `session_analytics` (mat. view) | ✅ | REVOKE directo + función `get_my_session_analytics()` SECURITY DEFINER | ✅ |
+| `handle_new_user()` trigger | ✅ | SECURITY DEFINER + `SET search_path = public` | ✅ |
+
+**Correcciones aplicadas directamente en 003/004/005 (migraciones aún no aplicadas):**
+- `(SELECT auth.uid())` en *todas* las políticas — evita re-evaluación fila a fila (~95% mejora)
+- `TO authenticated` en *todas* las políticas — descarta evaluación para rol anon (~99% mejora)
+- `WITH CHECK` explícito en INSERT/UPDATE
+- `feedback_annotations`: doble `IN` anidado → `JOIN` (mejor plan de ejecución)
+- `handle_new_user()`: añadido `SET search_path = public` (previene search_path hijacking)
+- `get_my_session_analytics()`: usa `(SELECT auth.uid())` + `SET search_path = public`
+
+### Minitareas
+
+- [x] **1.5.1** 🗄️ Hardening RLS completo en migraciones 003, 004, 005:
+  - `(SELECT auth.uid())` en todas las políticas
+  - `TO authenticated` en todas las políticas
+  - `SET search_path = public` en funciones SECURITY DEFINER
+  - REVOKE + función segura para `session_analytics`
+
+- [x] **1.5.2** 📦 Aplicar las 5 migraciones en Supabase **en orden** (001 → 002 → 003 → 004 → 005) desde el SQL editor o CLI de Supabase.
+  > Verificar que `pgvector` y `pgcrypto` estén habilitados antes de ejecutar 001.
+
+- [x] **1.5.3** 📦 Generar tipos TypeScript del schema: `npx supabase gen types typescript --project-id <id> > src/types/database.ts`. Importar en `src/lib/supabase.ts` como parámetro genérico del cliente.
+
+- [x] **1.5.4** ✅ Verificaciones de RLS en Supabase Table Editor:
+  - Intentar leer `sessions` sin estar logueado → debe retornar 0 filas (o error 401).
+  - Loguearse con usuario A, insertar una sesión, loguearse con usuario B → usuario B no debe ver la sesión de A.
+  - Llamar `supabase.rpc('get_my_session_analytics')` → debe retornar solo filas propias.
+  - Intentar hacer `SELECT * FROM session_analytics` directamente con la anon key → debe retornar error de permisos.
+
+- [x] **1.5.5** ✅ Verificar el trigger `on_auth_user_created`: registrar un nuevo usuario y confirmar que se crean automáticamente las filas en `profiles`, `user_settings` y `user_streaks`.
+
 ## Fase 2 — App shell, theming y navegación por swipe
 
 - [ ] **2.1** 🎨 Theme tokens en `src/theme/`: paleta dark + light, glass tokens (blur, opacity), tipografía. Hook `useTheme()`.
