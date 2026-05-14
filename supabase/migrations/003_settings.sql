@@ -57,7 +57,9 @@ CREATE INDEX idx_topics_user ON roleplay_topic_batches(user_id, language, create
 
 -- ─── TRIGGER: auto-crear profile al registrarse ──────────────────────
 CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public          -- previene search_path hijacking (Supabase Advisor: high severity)
+AS $$
 BEGIN
   INSERT INTO profiles(id, email)
   VALUES (NEW.id, NEW.email);
