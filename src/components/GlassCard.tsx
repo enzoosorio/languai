@@ -8,18 +8,19 @@ interface GlassCardProps extends ViewProps {
   className?: string; // Para compatibilidad con className wrapper de ser necesario
 }
 
-export const GlassCard: React.FC<GlassCardProps> = ({ 
-  children, 
-  style, 
-  intensity = 20,
-  ...props 
+export const GlassCard: React.FC<GlassCardProps> = ({
+  children,
+  style,
+  intensity,
+  ...props
 }) => {
   const { isDark, colors } = useTheme();
+  const resolvedIntensity = intensity ?? (isDark ? 15 : 22);
 
   return (
     <View style={[styles.container, { borderColor: colors.border }, style]} {...props}>
       <BlurView
-        intensity={intensity}
+        intensity={resolvedIntensity}
         tint={isDark ? 'dark' : 'light'}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"

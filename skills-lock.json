@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "core-motion": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/core-motion/SKILL.md",
+      "computedHash": "c97e87e14a37471565b72806327e790076fce9da80fb42c08939a2a8f513b9f0"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",

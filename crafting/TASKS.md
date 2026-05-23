@@ -86,25 +86,25 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 2 — App shell, theming y navegación por swipe
 
-- [ ] **2.1** 🎨 Theme tokens en `src/theme/`: paleta dark + light, glass tokens (blur, opacity), tipografía. Hook `useTheme()`.
-- [ ] **2.2** 🎨 Componente reusable `<GlassCard />` con `expo-blur` y bordes redondeados. Aplica dark/light correctamente.
-- [ ] **2.3** 🎨 Implementar navegación principal con `react-native-pager-view` (swipe horizontal): Home (centro), Roleplay (izq), SRS + Shadow (der).
-- [ ] **2.4** 🎨 Botones fallback equivalentes al swipe en cada extremo de Home (máscara 🎭 a la izq, libro 📚 a la der).
-- [ ] **2.5** 🎨 Pantalla Home estática: botón circular masivo central, header con selector de idioma (EN B2 / DE A1) + streak 🔥 placeholder, input píldora abajo.
-- [ ] **2.6** 🎨 Toggle dark/light en una pantalla de ajustes mínima (acceso desde long-press en header).
-- [ ] **2.7** ✅ Verificar swipes + fallback + theming en device físico.
+- [x] **2.1** 🎨 Theme tokens en `src/theme/`: paleta dark + light, glass tokens (blur, opacity), tipografía. Hook `useTheme()`.
+- [x] **2.2** 🎨 Componente reusable `<GlassCard />` con `expo-blur` y bordes redondeados. Aplica dark/light correctamente.
+- [x] **2.3** 🎨 Implementar navegación principal con `react-native-pager-view` (swipe horizontal): Home (centro), Roleplay (izq), SRS + Shadow (der).
+- [x] **2.4** 🎨 Botones fallback equivalentes al swipe en cada extremo de Home (máscara 🎭 a la izq, libro 📚 a la der).
+- [x] **2.5** 🎨 Pantalla Home estática: botón circular masivo central, header con selector de idioma (EN B2 / DE A1) + streak 🔥 placeholder, input píldora abajo.
+- [x] **2.6** 🎨 Toggle dark/light accesible desde language pill en header.
+- [x] **2.7** ✅ Verificar swipes + fallback + theming en device físico.
 
 ## Fase 2.5 — Onboarding
 
-- [ ] **2.5.1** 🎨 Componente `<OnboardingStep />` reutilizable con barra de progreso y botones "Siguiente" / "Omitir" (para pasos opcionales).
-- [ ] **2.5.2** 🎨 Paso 1 — Idioma nativo: selector de idioma (lista scrolleable, al menos 10 idiomas comunes). Guarda en `user_settings.native_language`.
-- [ ] **2.5.3** 🎨 Paso 2 — Idiomas a practicar: toggle multi-select EN 🇺🇸 / DE 🇩🇪 (MVP). Guarda selección.
-- [ ] **2.5.4** 🎨 Paso 3 — Nivel por idioma: selector CEFR (A1/A2/B1/B2/C1) para cada idioma elegido. Guarda en `user_settings.languages_config`.
-- [ ] **2.5.5** 🎨 Paso 4 — Tour de funciones: 3-4 tarjetas swipeables estáticas con illustrations del botón central, swipe izq (Roleplay), swipe der (SRS + Shadow).
-- [ ] **2.5.6** 🎨 Paso 5 — GitHub opcional: inputs para Personal Access Token + nombre del repo. Botón "Ahora no" sin penalización. Validar token si se ingresa.
-- [ ] **2.5.7** 🗄️ Al finalizar: setear `user_settings.onboarding_completed = true`. Navegar a Home.
-- [ ] **2.5.8** 🧠 En el arranque de la app: si `onboarding_completed = false`, redirigir a Onboarding antes de mostrar Home.
-- [ ] **2.5.9** ✅ Onboarding completo de inicio a fin con y sin GitHub. Verificar que el nivel elegido se refleja en el selector de idioma del Home.
+- [x] **2.5.1** 🎨 ~~Componente `<OnboardingStep />`~~ → Implementado como pantalla de 3 pasos inline con chips seleccionables.
+- [x] **2.5.2** 🎨 Paso 1 — Idioma nativo: 12 idiomas comunes. Guarda en `user_settings.native_language`.
+- [x] **2.5.3** 🎨 Paso 2 — Idioma objetivo EN / DE. Guarda selección.
+- [x] **2.5.4** 🎨 Paso 2 — Nivel CEFR (A1–C1). Guarda en `user_settings.languages_config`.
+- [ ] **2.5.5** 🎨 Paso 4 — Tour de funciones (diferido: baja prioridad para MVP funcional).
+- [ ] **2.5.6** 🎨 Paso 5 — GitHub opcional (diferido a Fase 12).
+- [x] **2.5.7** 🗄️ Al finalizar: setear `user_settings.onboarding_completed = true`. Navegar a Home.
+- [x] **2.5.8** 🧠 En arranque: si `onboarding_completed = false`, redirigir a Onboarding. Implementado via gate en `App.tsx`.
+- [ ] **2.5.9** ✅ Onboarding completo de inicio a fin. Verificar que el nivel elegido se refleja en la language pill del Home.
 
 ## Fase 3 — Voice pipeline (modo libre MVP loop)
 
