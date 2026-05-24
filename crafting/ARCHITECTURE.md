@@ -5,9 +5,11 @@
 | Decisión | Elección | Motivo |
 |---|---|---|
 | Backend | Supabase | Auth + DB + Edge Functions + Realtime en uno, sin infra propia |
-| LLM Core | OpenCode proxy (GPT-4o / Claude Sonnet) | Plan Go cubre costo, compatible con OpenAI SDK |
-| STT | Groq Whisper API | ~300ms, precio casi nulo |
-| TTS MVP | OpenAI TTS (`nova`) | Simple, ~400ms, barato |
+| LLM Conversación | DeepSeek V4 Flash (vía OpenCode proxy) | Mejor latencia del pool; calidad >90% de Pro. Ver [MODELS.md](MODELS.md) |
+| LLM Feedback / Judge / Extract | DeepSeek V4 Pro (vía OpenCode proxy) | Mejor reasoning del pool, JSON structured output. Asíncrono, no bloquea voice loop |
+| Grammar filter paralelo | LanguageTool (OSS) | Rule-based, segundo opinador no autoritativo en feedback pipeline |
+| STT | Groq Whisper Large v3 Turbo | ~300ms, imbatible costo/latencia |
+| TTS MVP | OpenAI TTS (`nova`/`onyx`) | Simple, ~400ms, barato |
 | TTS V2 | ElevenLabs Turbo WebSocket | Streaming phrase-by-phrase, latencia percibida < 1s |
 | LLM Voice MVP | Full response → TTS | Confiable, 2-3s total de latencia — aceptable |
 | LLM Voice V2 | Streaming + TTS phrase-by-phrase | Menor latencia pero solo cuando sea 100% fluido |
@@ -393,17 +395,37 @@ App (RN)                  Supabase Realtime         Edge: generate-feedback
 
 ### 3.4 Pipeline completo post-sesión (Feedback + RAG + Obsidian)
 
+**Optimización clave:** análisis per-turn corre asíncrono **durante** la sesión. El job final solo agrega resultados pre-computados. Esto baja el loader post-sesión de 15-20s a 2-3s.
+
 ```
-Usuario cierra sesión
+DURANTE LA SESIÓN (background, paralelo al voice loop):
+─────────────────────────────────────────────────────
+Cada turno del usuario   ─►  Edge: analyze-turn (DeepSeek V4 Flash)
+                              │
+                              └── INSERT feedback_annotations parciales
+                              
+Cada turno del usuario   ─►  Edge: score-pronunciation (Azure Speech)
+                              │
+                              └── UPDATE session_turns.pronunciation_score
+
+Cada 3 turnos del user   ─►  Edge: extract-facts (DeepSeek V4 Flash)
+                              │
+                              └── pipeline §1.3 de MEMORY_SYSTEM.md
+
+USUARIO CIERRA SESIÓN:
+─────────────────────────────────────────────────────
          │
          ▼
-Edge: generate-feedback (asíncrona)
- ├── Lee session_turns de Supabase
- ├── Llama LLM con transcripción completa
- │   └── Devuelve JSON: turns[].annotations[], summary, tags, tracked_items[]
- ├── Valida JSON (retry si falla parse)
- ├── Escribe feedback_annotations
+Edge: generate-feedback (asíncrona) — DeepSeek V4 Pro
+ ├── PARALELO ─┬─ Lee annotations parciales pre-computadas
+ │             │
+ │             └─ LanguageTool API → annotations sintácticas (source='languagetool')
+ │
+ ├── Llama LLM con transcripción completa para análisis cross-turn / patrones
+ ├── Valida JSON (2 retries si parsing falla)
+ ├── MERGE annotations LLM + LanguageTool (dedupe por span; LLM gana en colisiones)
  ├── UPSERT tracked_items (acumula weight, actualiza srs_state)
+ ├── Genera summary + tags
  └── UPDATE sessions SET summary, tags, feedback_status='done'
          │
          ├──► Supabase Realtime notifica a la App
@@ -454,18 +476,22 @@ buildSystemPrompt(user_id, session)
 
 ## 4. Edge Functions — responsabilidades
 
-| Función | Trigger | Input | Output | Costo IA |
+| Función | Trigger | Input | Output | Modelo |
 |---|---|---|---|---|
-| `chat-turn` | Cada turno del usuario | `{session_id, user_text, lang, level}` | `{ai_text, audio_b64}` | 1 LLM call/turno |
-| `generate-feedback` | Al cerrar sesión | `session_id` | annotations + tracked_items en DB | 1 LLM call/sesión |
-| `generate-roleplay-topics` | Al abrir Roleplay | `{lang, level, user_interests[]}` | `topics[]` (batch 5) | 1 LLM call/batch |
-| `analyze-youtube` | Al pegar URL | `{url, lang}` | `{summary, key_points, transcript}` | 1 Gemini call/video |
-| `extract-facts` | Post-sesión (paralelo) | `session_id` | `user_facts[]` en DB | 1 LLM call + N embeddings |
-| `generate-srs-drill` | Al iniciar drill SRS | `{item_ids[], lang}` | `exercises[]` | 1 LLM call/drill |
-| `export-obsidian` | Post-sesión (si config) | `session_id` | Markdown en GitHub (PUT directo, PR como fallback) | 0 (sin LLM, solo formato) |
-| `score-pronunciation` | Post-turno usuario | `{audio_b64, transcript, lang}` | `{score, breakdown}` | 0 (Azure Speech, no LLM) |
-| `generate-shadow-exercise` | Al iniciar Shadow Reading | `{lang, level, tracked_items[]}` | `{phrase, audio_b64}` | 1 TTS call + 1 LLM call/batch |
-| `weekly-report` | Cron dominical 23:00 UTC | `user_id` | Markdown en GitHub + datos en DB | 1 LLM call/semana/usuario |
+| `chat-turn` | Cada turno del usuario | `{session_id, user_text, lang, level}` | `{ai_text, tool_calls?}` | DeepSeek V4 Flash + tool `end_conversation` |
+| `analyze-turn` | Async post-turno | `{turn_id, prev_turns[]}` | annotations parciales en DB | DeepSeek V4 Flash |
+| `score-pronunciation` | Async post-turno usuario | `{audio_b64, transcript, lang}` | `pronunciation_score` en `session_turns` | Azure Speech (no LLM) |
+| `extract-facts` | Cada 3 turnos + cierre | `{session_id, turn_ids[]}` | `user_facts[]` con validación contra existentes | DeepSeek V4 Flash + embeddings + Judge call para conflicts |
+| `judge-fact` | Sub-call de extract-facts | `{old_fact, new_fact}` | `{verdict: IDEMPOTENT\|REFINES\|CONTRADICTS\|CONTEXT_DEPENDENT\|UNRELATED}` | DeepSeek V4 Pro |
+| `generate-feedback` | Al cerrar sesión | `session_id` | annotations agregadas + tracked_items en DB | DeepSeek V4 Pro + LanguageTool (paralelo) |
+| `generate-roleplay-topics` | Al abrir Roleplay | `{lang, level, user_interests[]}` | `topics[]` (batch 5) | DeepSeek V4 Flash |
+| `analyze-youtube` | Al pegar URL | `{url, lang}` | `{summary, key_points, transcript}` | Gemini 1.5 Flash |
+| `generate-srs-drill` | Al iniciar drill SRS | `{item_ids[], lang}` | `exercises[]` | DeepSeek V4 Pro |
+| `generate-shadow-exercise` | Al iniciar Shadow Reading | `{lang, level, tracked_items[]}` | `{phrase, audio_b64}` | DeepSeek V4 Flash + OpenAI TTS |
+| `export-obsidian` | Post-sesión (si config) | `session_id` | Markdown en GitHub | sin LLM, solo formato |
+| `weekly-report` | Cron dominical 23:00 UTC | `user_id` | Markdown en GitHub + datos en DB | DeepSeek V4 Pro |
+
+Ver [MODELS.md](MODELS.md) para el detalle de por qué cada modelo y cómo hacer swap.
 
 ---
 
