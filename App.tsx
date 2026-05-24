@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
-import { StyleSheet, View, StatusBar, ActivityIndicator } from 'react-native';
-import PagerView from 'react-native-pager-view';
+import { StyleSheet, StatusBar, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import {
   DarkerGrotesque_400Regular,
@@ -14,23 +14,29 @@ import {
   PlusJakartaSans_400Regular,
   PlusJakartaSans_600SemiBold,
 } from '@expo-google-fonts/plus-jakarta-sans';
+// Bricolage Grotesque — body text canónico (DESIGN_SYSTEM.md § 3)
+import {
+  BricolageGrotesque_300Light,
+  BricolageGrotesque_400Regular,
+} from '@expo-google-fonts/bricolage-grotesque';
 
 import { useTheme } from './src/hooks/useTheme';
 import { useThemeStore } from './src/stores/themeStore';
 import { useUserStore } from './src/stores/useUserStore';
 import { supabase } from './src/lib/supabase';
 import { BackgroundBlob } from './src/components/BackgroundBlob';
+import { HorizontalNav, HorizontalNavRef } from './src/components/HorizontalNav';
 
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { RoleplayScreen } from './src/screens/RoleplayScreen';
 import { SRSScreen } from './src/screens/SRSScreen';
 
-// Onboarding placeholder until Chunk B is built
+// Onboarding placeholder hasta que se construya Chunk B
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 
 export default function App() {
-  const pagerRef = useRef<PagerView>(null);
+  const navRef = useRef<HorizontalNavRef>(null);
   const { isDark, colors } = useTheme();
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
 
@@ -38,17 +44,22 @@ export default function App() {
     useUserStore();
 
   const [fontsLoaded] = useFonts({
+    // Darker Grotesque — nav, captions
     DarkerGrotesque_400Regular,
     DarkerGrotesque_500Medium,
     DarkerGrotesque_600SemiBold,
     DarkerGrotesque_700Bold,
+    // Plus Jakarta Sans — display, logo
     PlusJakartaSans_200ExtraLight,
     PlusJakartaSans_400Regular,
     PlusJakartaSans_600SemiBold,
+    // Bricolage Grotesque — body, fine (DESIGN_SYSTEM.md § 3)
+    BricolageGrotesque_300Light,
+    BricolageGrotesque_400Regular,
   });
 
   useEffect(() => {
-    // Restore session on mount
+    // Restaurar sesión al montar
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
@@ -57,7 +68,7 @@ export default function App() {
       setLoading(false);
     });
 
-    // Listen for auth state changes (login / logout / token refresh)
+    // Escuchar cambios de auth (login / logout / token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
@@ -74,71 +85,72 @@ export default function App() {
   }, []);
 
   const goToPage = (pageIndex: number) => {
-    pagerRef.current?.setPage(pageIndex);
+    navRef.current?.goToPage(pageIndex);
   };
 
   const isReady = fontsLoaded && !isLoading;
 
   if (!isReady) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.accent} style={StyleSheet.absoluteFill} />
-      </SafeAreaView>
+      <GestureHandlerRootView style={styles.rootView}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+          <ActivityIndicator color={colors.accent} style={StyleSheet.absoluteFill} />
+        </SafeAreaView>
+      </GestureHandlerRootView>
     );
   }
 
   if (!user) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <BackgroundBlob />
-        <LoginScreen />
-      </SafeAreaView>
+      <GestureHandlerRootView style={styles.rootView}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+          <BackgroundBlob />
+          <LoginScreen />
+        </SafeAreaView>
+      </GestureHandlerRootView>
     );
   }
 
   if (!settings?.onboarding_completed) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <BackgroundBlob />
-        <OnboardingScreen />
-      </SafeAreaView>
+      <GestureHandlerRootView style={styles.rootView}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+          <BackgroundBlob />
+          <OnboardingScreen />
+        </SafeAreaView>
+      </GestureHandlerRootView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <BackgroundBlob />
+    <GestureHandlerRootView style={styles.rootView}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <BackgroundBlob />
 
-      <PagerView style={styles.pagerView} initialPage={1} ref={pagerRef}>
-        <View key="0" style={styles.page}>
+        {/* HorizontalNav — 3 páginas [Roleplay | Home | SRS], arranca en Home (1) */}
+        <HorizontalNav ref={navRef} initialPage={1}>
           <RoleplayScreen onNavigateHome={() => goToPage(1)} />
-        </View>
-        <View key="1" style={styles.page}>
           <HomeScreen
             onNavigateRoleplay={() => goToPage(0)}
             onNavigateSRS={() => goToPage(2)}
             onToggleTheme={toggleTheme}
           />
-        </View>
-        <View key="2" style={styles.page}>
           <SRSScreen onNavigateHome={() => goToPage(1)} />
-        </View>
-      </PagerView>
-    </SafeAreaView>
+        </HorizontalNav>
+
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  rootView: {
+    flex: 1,
+  },
   safeArea: {
-    flex: 1,
-  },
-  pagerView: {
-    flex: 1,
-  },
-  page: {
     flex: 1,
   },
 });

@@ -12,7 +12,7 @@ export const RoleplayScreen: React.FC<Props> = ({ onNavigateHome }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <GlassCard intensity={40} style={styles.card}>
+      <GlassCard tier="soft" style={styles.card}>
         <Text style={[styles.title, { color: colors.text }]}>Roleplay Session</Text>
         <Text style={{ color: colors.textMuted, marginBottom: 20 }}>
           You're now in the roleplay environment. Talk to your AI partner!

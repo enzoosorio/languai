@@ -12,7 +12,7 @@ export const SRSScreen: React.FC<Props> = ({ onNavigateHome }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <GlassCard intensity={40} style={styles.card}>
+      <GlassCard tier="soft" style={styles.card}>
         <Text style={[styles.title, { color: colors.text }]}>SRS Practice</Text>
         <Text style={{ color: colors.textMuted, marginBottom: 20 }}>
           Review your mistakes and learned vocabulary here.
