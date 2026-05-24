@@ -7,11 +7,35 @@
       "skillPath": "skills/core-motion/SKILL.md",
       "computedHash": "c97e87e14a37471565b72806327e790076fce9da80fb42c08939a2a8f513b9f0"
     },
+    "figma-generate-library": {
+      "source": "figma/mcp-server-guide",
+      "sourceType": "github",
+      "skillPath": "skills/figma-generate-library/SKILL.md",
+      "computedHash": "a5e1a5bc418dd8152aa555952e5b346ff3903e5de140e1c3c8f6c3bf031c1460"
+    },
+    "figma-implement-design": {
+      "source": "openai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/.curated/figma-implement-design/SKILL.md",
+      "computedHash": "f86f7eb84aeda74334e1eb33faf08dc67e19d88ef5f2cc84eee559333e88e001"
+    },
+    "figma-use": {
+      "source": "figma/mcp-server-guide",
+      "sourceType": "github",
+      "skillPath": "skills/figma-use/SKILL.md",
+      "computedHash": "7f4249c65c0dde3042748a285e05e51c0f5bd3b88136b7d465f4876d577ae17e"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
       "skillPath": "skills/frontend-design/SKILL.md",
       "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
+    },
+    "gesture-handler-3-migration": {
+      "source": "software-mansion/react-native-gesture-handler",
+      "sourceType": "github",
+      "skillPath": "skills/gesture-handler-3-migration/SKILL.md",
+      "computedHash": "702678bc43c8848a929d76554b2e07bdd391cc192fa12cd9e4e49e65bdd32584"
     },
     "ios-accessibility": {
       "source": "dpearson2699/swift-ios-skills",
@@ -36,6 +60,12 @@
       "sourceType": "github",
       "skillPath": "plugins/ui-design/skills/mobile-ios-design/SKILL.md",
       "computedHash": "30f9f969f4fa664addff529ca3f62352f951cd672e6f10b8a9ea26fb5c55b9b5"
+    },
+    "reanimated-skia-performance": {
+      "source": "andreev-danila/skills",
+      "sourceType": "github",
+      "skillPath": "skills/reanimated-skia-performance/SKILL.md",
+      "computedHash": "c487dc7ed351bcc5fdfcb4e9a750e8b9c03c18c54f77ef6946c94b9d9c931767"
     },
     "sleek-design-mobile-apps": {
       "source": "sleekdotdesign/agent-skills",
