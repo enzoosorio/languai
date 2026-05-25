@@ -86,6 +86,23 @@ Estimación de costos operativos por sesión y por mes. Incluye el **plan primar
 - **Con Plan Go:** $0
 - **Fallback GPT-4o Mini:** **~$0.0008/semana** → ~$0.003/mes
 
+### LLM — Guided Practice chips (`guided-chips`)
+
+- ~150 tokens entrada + ~200 tokens salida por turno donde se emiten chips
+- ~12 turnos con chips por sesión × 30 sesiones/mes = ~360 llamadas extra/mes
+- **Con Plan Go:** $0 (cubierto)
+- **Fallback DeepSeek V4 Flash:** **~$0.10/mes**
+
+### Vocabulary Catalog — definición LLM (`vocabulary_definitions_cache`)
+
+- ~300 tokens por entrada nueva; cacheada globalmente por `(lemma, language)` — un usuario amortiza el costo para todos
+- ~5 entradas nuevas/mes estimadas
+- **Con Plan Go:** $0 (cubierto)
+- **Fallback:** **~$0.05/mes** (con margen; en práctica será menor gracias al caché global)
+- Sugerencia post-sesión: ~100 tokens extra en `generate-feedback` — ya costeado en esa fila
+
+**Total adicional nuevas features:** ~$0.15/mes sobre el plan base actual.
+
 ---
 
 ## Resumen mensual (30 sesiones/mes, 1 sesión/día)
@@ -102,7 +119,9 @@ Estimación de costos operativos por sesión y por mes. Incluye el **plan primar
 | Gemini (YouTube, ocasional) | $0 | $0 |
 | GitHub API | $0 | $0 |
 | Weekly report (LLM) | $0 | ~$0.003 |
-| **TOTAL MENSUAL** | **~$1.41** | **~$1.52** |
+| LLM guided-chips | $0 | ~$0.10 |
+| Vocabulary definitions (LLM) | $0 | ~$0.05 |
+| **TOTAL MENSUAL** | **~$1.41** | **~$1.67** |
 
 ---
 
