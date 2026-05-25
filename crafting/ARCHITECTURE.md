@@ -56,7 +56,9 @@
 │  │  ┌──────┴──────┐ ┌────────┴─────────┐ ┌────────────────────┐│   │
 │  │  │analyze-     │ │extract-facts     │ │export-obsidian     ││   │
 │  │  │youtube      │ └──────────────────┘ └────────────────────┘│   │
-│  │  └─────────────┘                                             │   │
+│  │  └─────────────┘ ┌──────────────────┐                        │   │
+│  │                  │ guided-chips     │  ← chips para modo     │   │
+│  │                  └──────────────────┘    guided practice      │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │ HTTPS
@@ -94,24 +96,32 @@ profiles ──────────────── user_settings
     ├──────────── user_streaks (1:1)
     │
     ├──────────── tracked_items (1:N)
-    │                 │ N
-    │                 │ ◄── feedback_annotations (N:1, optional)
-    │                 │ ◄── deep_dive_sessions.tracked_item_id
+    │                 │ N                   ┌── vocabulary_catalog (1:N) ◄────┐
+    │                 │ ◄── feedback_annotations (N:1, optional)              │
+    │                 │ ◄── deep_dive_sessions.tracked_item_id                │
+    │                 │ ── (al graduarse) ──────────────────────────────────►─┘
+    │
+    ├──────────── user_corpus_exposure (1:N) ──► b2_expressions_corpus (global)
     │
     ├──────────── user_facts (1:N, embeddings pgvector)
     │
     ├──────────── roleplay_topic_batches (1:N)
     │
-    └──────────── sessions (1:N)
+    └──────────── sessions (1:N)  [mode: free|roleplay|guided]
                       │ 1
                       ├──────── session_turns (1:N)
-                      │              │ 1
+                      │              │                 [chips_offered, chips_used,
+                      │              │                  constraint_status — solo en mode=guided]
                       │              └──── feedback_annotations (1:N)
                       │
                       └──────── deep_dive_sessions (1:N)
                                     │ parent_session_id
                                     │ dive_session_id ──► sessions
                                     └ tracked_item_id ──► tracked_items
+
+-- Tablas globales (sin user_id, lectura authenticated):
+b2_expressions_corpus  ──► user_corpus_exposure (N:M via user_id+corpus_id)
+vocabulary_definitions_cache  (caché global de definiciones LLM)
 ```
 
 ### DDL completo y normalizado
@@ -283,6 +293,132 @@ CREATE TABLE roleplay_topic_batches (
 );
 
 CREATE INDEX idx_topics_user ON roleplay_topic_batches(user_id, language, created_at DESC);
+
+-- ─── MIGRACIÓN 006: Guided Practice + Vocabulary Catalog ───────────────
+-- Aplicar DESPUÉS de las migraciones 001-005.
+
+-- ALTER sessions: añadir columna mode para distinguir free/roleplay/guided
+-- (type se mantiene para free|roleplay|deep_dive — guided es un sub-modo de free)
+ALTER TABLE sessions
+  ADD COLUMN mode text NOT NULL DEFAULT 'free'
+  CHECK (mode IN ('free', 'roleplay', 'guided'));
+
+-- ALTER session_turns: metadata de chips para sesiones guiadas
+ALTER TABLE session_turns
+  ADD COLUMN chips_offered     jsonb,    -- array de los 4 chips ofrecidos en ese turno
+  ADD COLUMN chips_used        text[],   -- lemmas que matchearon (fuzzy ≥ 0.8)
+  ADD COLUMN constraint_status text      -- 'satisfied' | 'skipped' | 'no_chips' | null
+    CHECK (constraint_status IN ('satisfied','skipped','no_chips'));
+
+-- ─── B2 EXPRESSIONS CORPUS (tabla global, no por usuario) ────────────────
+-- Semilla inicial ~150 expresiones. Fuente: Oxford Learner's + Cambridge English.
+-- Crece vía migraciones SQL curadas; no hay ingesta automática.
+CREATE TABLE b2_expressions_corpus (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  expression  text NOT NULL,          -- forma de superficie ("show up")
+  lemma       text NOT NULL UNIQUE,   -- normalizado ("show_up")
+  category    text NOT NULL           -- 'phrasal_verb'|'conjunction'|'collocation'|'adverb'|'idiom'
+              CHECK (category IN ('phrasal_verb','conjunction','collocation','adverb','idiom')),
+  tags        text[] NOT NULL DEFAULT '{}',  -- ['daily','work','formal','social']
+  difficulty  text NOT NULL DEFAULT 'B2',    -- 'B1'|'B2'|'C1' — permite expansión futura
+  example     text,                          -- ejemplo de uso curado
+  language    text NOT NULL DEFAULT 'en',    -- 'en' únicamente en MVP; 'de' post-MVP
+  created_at  timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_corpus_tags     ON b2_expressions_corpus USING GIN(tags);
+CREATE INDEX idx_corpus_language ON b2_expressions_corpus(language, difficulty);
+
+-- RLS: lectura pública para authenticated; escritura solo service_role (migraciones)
+ALTER TABLE b2_expressions_corpus ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "corpus_select" ON b2_expressions_corpus
+  FOR SELECT TO authenticated USING (true);
+
+-- ─── USER CORPUS EXPOSURE ────────────────────────────────────────────────
+-- Trackea cuántas veces se ofreció/usó cada chip del corpus por usuario.
+-- Evita re-ofrecer expresiones ya dominadas y permite ordenar por relevancia.
+CREATE TABLE user_corpus_exposure (
+  user_id          uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  corpus_id        uuid NOT NULL REFERENCES b2_expressions_corpus(id) ON DELETE CASCADE,
+  times_offered    int NOT NULL DEFAULT 0,
+  times_used       int NOT NULL DEFAULT 0,   -- veces que matcheó en turno del usuario
+  last_offered_at  timestamptz,
+  PRIMARY KEY (user_id, corpus_id)
+);
+
+CREATE INDEX idx_exposure_user ON user_corpus_exposure(user_id, times_used DESC);
+
+ALTER TABLE user_corpus_exposure ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "exposure_select" ON user_corpus_exposure
+  FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id);
+CREATE POLICY "exposure_upsert" ON user_corpus_exposure
+  FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = user_id);
+CREATE POLICY "exposure_update" ON user_corpus_exposure
+  FOR UPDATE TO authenticated USING ((SELECT auth.uid()) = user_id);
+
+-- ─── VOCABULARY CATALOG ──────────────────────────────────────────────────
+-- Catálogo permanente de palabras/expresiones aprendidas o adoptadas.
+-- Distinto de tracked_items (errores con weight mutable).
+-- Una vez en catálogo, queda en catálogo; los errores futuros crean nuevos tracked_items.
+CREATE TABLE vocabulary_catalog (
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                 uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  expression              text NOT NULL,
+  lemma                   text NOT NULL,
+  language                text NOT NULL DEFAULT 'en',
+  cefr_level              text,           -- 'A2'|'B1'|'B2'|'C1' — estimado por LLM o del corpus
+  category                text,           -- 'phrasal_verb'|'word'|'collocation'|'idiom'
+  source                  text NOT NULL   -- cómo entró al catálogo
+    CHECK (source IN (
+      'promoted_from_tracked',    -- graduación desde tracked_items
+      'post_session_suggestion',  -- sugerencia post-sesión aceptada
+      'manual_tap',               -- long-press en feedback/transcripción
+      'guided_mastered'           -- usado correctamente 3+ veces en guided mode
+    )),
+  source_session_id       uuid REFERENCES sessions(id),       -- sesión donde se aprendió
+  source_tracked_item_id  uuid REFERENCES tracked_items(id),  -- si vino por promoción
+  definition              text,           -- generada por LLM al ingresar; no editable
+  example                 text,           -- generado por LLM; no editable
+  user_note               text,           -- nota libre del usuario (única parte editable)
+  tags                    text[] NOT NULL DEFAULT '{}',
+  added_at                timestamptz NOT NULL DEFAULT now(),
+  last_seen_at            timestamptz,    -- última sesión donde apareció
+  times_used_after_catalog int NOT NULL DEFAULT 0,
+  hidden                  bool NOT NULL DEFAULT false,  -- ocultar sin borrar
+  UNIQUE (user_id, lemma, language)        -- una entrada por lemma+idioma por usuario
+);
+
+CREATE INDEX idx_catalog_user     ON vocabulary_catalog(user_id, language, added_at DESC);
+CREATE INDEX idx_catalog_lemma    ON vocabulary_catalog(user_id, lemma, language);
+CREATE INDEX idx_catalog_tags     ON vocabulary_catalog USING GIN(tags);
+CREATE INDEX idx_catalog_active   ON vocabulary_catalog(user_id, language)
+  WHERE hidden = false;
+
+ALTER TABLE vocabulary_catalog ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "catalog_select" ON vocabulary_catalog
+  FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id);
+CREATE POLICY "catalog_insert" ON vocabulary_catalog
+  FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = user_id);
+CREATE POLICY "catalog_update" ON vocabulary_catalog
+  FOR UPDATE TO authenticated USING ((SELECT auth.uid()) = user_id);
+
+-- ─── VOCABULARY DEFINITIONS CACHE (global) ───────────────────────────────
+-- Caché de definiciones generadas por LLM para evitar regenerar por idioma+lemma.
+-- Compartido entre usuarios — la definición de "show up" es la misma para todos.
+CREATE TABLE vocabulary_definitions_cache (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lemma       text NOT NULL,
+  language    text NOT NULL DEFAULT 'en',
+  definition  text NOT NULL,
+  example     text NOT NULL,
+  generated_at timestamptz DEFAULT now(),
+  UNIQUE (lemma, language)
+);
+
+ALTER TABLE vocabulary_definitions_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "def_cache_select" ON vocabulary_definitions_cache
+  FOR SELECT TO authenticated USING (true);
+-- INSERT solo desde service_role (Edge Functions); usuarios solo leen.
 
 -- ─── SESSION ANALYTICS (vista materializada) ─────────────────────────
 -- Métricas agregadas por semana para Weekly Report y pantalla Stats.
@@ -486,6 +622,7 @@ buildSystemPrompt(user_id, session)
 | `generate-feedback` | Al cerrar sesión | `session_id` | annotations agregadas + tracked_items en DB | DeepSeek V4 Pro + LanguageTool (paralelo) |
 | `generate-roleplay-topics` | Al abrir Roleplay | `{lang, level, user_interests[]}` | `topics[]` (batch 5) | DeepSeek V4 Flash |
 | `analyze-youtube` | Al pegar URL | `{url, lang}` | `{summary, key_points, transcript}` | Gemini 1.5 Flash |
+| `guided-chips` | App solicita chips para turno guiado | `{session_id, turn_id, focus: 'srs'\|'b2'\|'mixed'}` | `{should_emit_chips, chips[{expression,source,hint_short,hint_example}]}` | DeepSeek V4 Flash |
 | `generate-srs-drill` | Al iniciar drill SRS | `{item_ids[], lang}` | `exercises[]` | DeepSeek V4 Pro |
 | `generate-shadow-exercise` | Al iniciar Shadow Reading | `{lang, level, tracked_items[]}` | `{phrase, audio_b64}` | DeepSeek V4 Flash + OpenAI TTS |
 | `export-obsidian` | Post-sesión (si config) | `session_id` | Markdown en GitHub | sin LLM, solo formato |
