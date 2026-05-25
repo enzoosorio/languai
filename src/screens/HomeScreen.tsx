@@ -22,6 +22,7 @@ import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 import { useVoiceRecording } from '../hooks/useVoiceRecording';
 import { useUserStore } from '../stores/useUserStore';
@@ -126,6 +127,7 @@ export const HomeScreen: React.FC<Props> = ({
   onToggleTheme,
 }) => {
   const { isDark, colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user, settings, loadSettings } = useUserStore();
   const { startRecording, stopRecording } = useVoiceRecording();
   const { isActive, startSession, persistTurn, endSession } = useSessionStore();
@@ -338,7 +340,7 @@ export const HomeScreen: React.FC<Props> = ({
       >
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
-        <View style={styles.header}>
+        <View style={[styles.header, { top: insets.top + 12 }]}>
 
           {/* Izquierda: settings → lang/level picker */}
           <TouchableOpacity
@@ -468,7 +470,7 @@ export const HomeScreen: React.FC<Props> = ({
         )}
 
         {/* ── YouTube URL — sube por la altura completa del teclado ─────────── */}
-        <Reanimated.View style={[styles.ytContainer, ytKeyboardStyle]}>
+        <Reanimated.View style={[styles.ytContainer, { bottom: 20 + insets.bottom }, ytKeyboardStyle]}>
           {/* Glass */}
           <GlassLayers isDark={isDark} />
           {/* Border overlay */}
@@ -605,7 +607,7 @@ const styles = StyleSheet.create({
   // ── Header ──────────────────────────────────────────────────────────────────
   header: {
     position:       'absolute',
-    top:            20,
+    top:            20,   // overridden inline with insets.top + 12
     left:           20,
     right:          20,
     flexDirection:  'row',
@@ -708,9 +710,8 @@ const styles = StyleSheet.create({
   // ── YouTube input ────────────────────────────────────────────────────────────
   ytContainer: {
     position:          'absolute',
-    bottom:            36,
-    left:              24,
-    right:             24,
+    left:              32,
+    right:             32,
     flexDirection:     'row',
     alignItems:        'center',
     paddingHorizontal: 14,

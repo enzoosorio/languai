@@ -55,26 +55,26 @@ export function BackgroundBlob({ color, yPosition = 0.55 }: BackgroundBlobProps)
       false,
     ));
 
-    // X drift — wanders ±20 dp over asymmetric intervals (~43 s full cycle)
+    // X drift — wanders ±100 dp over asymmetric intervals (~43 s full cycle)
     driftX.set(withRepeat(
       withSequence(
-        withTiming( 18, { duration:  7200, easing: Easing.inOut(Easing.quad) }),
-        withTiming(-14, { duration:  9400, easing: Easing.inOut(Easing.quad) }),
-        withTiming(  5, { duration:  8100, easing: Easing.inOut(Easing.quad) }),
-        withTiming(-20, { duration: 10500, easing: Easing.inOut(Easing.quad) }),
+        withTiming( 90, { duration:  7200, easing: Easing.inOut(Easing.quad) }),
+        withTiming(-70, { duration:  9400, easing: Easing.inOut(Easing.quad) }),
+        withTiming( 25, { duration:  8100, easing: Easing.inOut(Easing.quad) }),
+        withTiming(-100, { duration: 10500, easing: Easing.inOut(Easing.quad) }),
         withTiming(  0, { duration:  7800, easing: Easing.inOut(Easing.quad) }),
       ),
       -1,
       false,
     ));
 
-    // Y drift — independent timing (~47 s full cycle)
+    // Y drift — independent timing (~47 s full cycle) — ±80 dp
     driftY.set(withRepeat(
       withSequence(
-        withTiming(-16, { duration:  9000, easing: Easing.inOut(Easing.quad) }),
-        withTiming( 12, { duration: 11000, easing: Easing.inOut(Easing.quad) }),
-        withTiming( -8, { duration:  8500, easing: Easing.inOut(Easing.quad) }),
-        withTiming( 20, { duration: 10200, easing: Easing.inOut(Easing.quad) }),
+        withTiming(-80, { duration:  9000, easing: Easing.inOut(Easing.quad) }),
+        withTiming( 60, { duration: 11000, easing: Easing.inOut(Easing.quad) }),
+        withTiming(-40, { duration:  8500, easing: Easing.inOut(Easing.quad) }),
+        withTiming( 90, { duration: 10200, easing: Easing.inOut(Easing.quad) }),
         withTiming(  0, { duration:  9000, easing: Easing.inOut(Easing.quad) }),
       ),
       -1,
@@ -127,6 +127,8 @@ export function BackgroundBlob({ color, yPosition = 0.55 }: BackgroundBlobProps)
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    zIndex:   -1,
+    // Sin zIndex negativo: el orden natural de render (blob antes que HorizontalNav
+    // en el árbol de SafeAreaView) lo pone detrás de la UI sin ocultar el fondo.
+    // zIndex: -1 lo ponía detrás del backgroundColor del SafeAreaView → invisible.
   },
 });

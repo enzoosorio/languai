@@ -8,7 +8,7 @@ import {
   DarkerGrotesque_600SemiBold,
   DarkerGrotesque_700Bold,
 } from '@expo-google-fonts/darker-grotesque';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   PlusJakartaSans_200ExtraLight,
   PlusJakartaSans_400Regular,
@@ -35,7 +35,11 @@ import { SRSScreen } from './src/screens/SRSScreen';
 // Onboarding placeholder hasta que se construya Chunk B
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 
-export default function App() {
+// ── Contenido interno de la app ────────────────────────────────────────────────
+// Separado de App para que SafeAreaProvider sea el raíz absoluto.
+// Sin SafeAreaProvider, useSafeAreaInsets() devuelve 0 en todas las pantallas
+// → Dynamic Island / botones de navegación del sistema se superponen a la UI.
+function AppContent() {
   const navRef = useRef<HorizontalNavRef>(null);
   const { isDark, colors } = useTheme();
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
@@ -90,43 +94,30 @@ export default function App() {
 
   const isReady = fontsLoaded && !isLoading;
 
+  // ── Contenido condicional en un solo return ─────────────────────────────────
+  let inner: React.ReactNode;
+
   if (!isReady) {
-    return (
-      <GestureHandlerRootView style={styles.rootView}>
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-          <ActivityIndicator color={colors.accent} style={StyleSheet.absoluteFill} />
-        </SafeAreaView>
-      </GestureHandlerRootView>
+    inner = <ActivityIndicator color={colors.accent} style={StyleSheet.absoluteFill} />;
+  } else if (!user) {
+    inner = (
+      <>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <BackgroundBlob />
+        <LoginScreen />
+      </>
     );
-  }
-
-  if (!user) {
-    return (
-      <GestureHandlerRootView style={styles.rootView}>
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-          <BackgroundBlob />
-          <LoginScreen />
-        </SafeAreaView>
-      </GestureHandlerRootView>
+  } else if (!settings?.onboarding_completed) {
+    inner = (
+      <>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <BackgroundBlob />
+        <OnboardingScreen />
+      </>
     );
-  }
-
-  if (!settings?.onboarding_completed) {
-    return (
-      <GestureHandlerRootView style={styles.rootView}>
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-          <BackgroundBlob />
-          <OnboardingScreen />
-        </SafeAreaView>
-      </GestureHandlerRootView>
-    );
-  }
-
-  return (
-    <GestureHandlerRootView style={styles.rootView}>
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+  } else {
+    inner = (
+      <>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <BackgroundBlob />
 
@@ -140,9 +131,26 @@ export default function App() {
           />
           <SRSScreen onNavigateHome={() => goToPage(1)} />
         </HorizontalNav>
+      </>
+    );
+  }
 
+  return (
+    <GestureHandlerRootView style={styles.rootView}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        {inner}
       </SafeAreaView>
     </GestureHandlerRootView>
+  );
+}
+
+// ── Raíz de la app ─────────────────────────────────────────────────────────────
+// SafeAreaProvider DEBE envolver todo para que useSafeAreaInsets() funcione.
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppContent />
+    </SafeAreaProvider>
   );
 }
 

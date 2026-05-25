@@ -159,30 +159,21 @@ export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
           {/* Track — las N pantallas montadas en fila */}
           <Animated.View
             style={[
-              { width: width * pages.length, height, flexDirection: 'row' },
+              { width: width * pages.length, height: '100%', flexDirection: 'row' },
               trackStyle,
             ]}
           >
             {pages.map((child, i) => (
-              <View key={i} style={{ width, height, overflow: 'hidden' }}>
+              <View key={i} style={{ width, height: '100%' }}>
                 {child}
+                {/* Membranas elásticas — dentro de cada página, se mueven con ella */}
+                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                  <ElasticSVG side="left"  pullX={leftPullX}  touchY={touchY} isDark={isDark} />
+                  <ElasticSVG side="right" pullX={rightPullX} touchY={touchY} isDark={isDark} />
+                </View>
               </View>
             ))}
           </Animated.View>
-
-          {/* Membranas elásticas — absoluto sobre el track */}
-          <ElasticSVG
-            side="left"
-            pullX={leftPullX}
-            touchY={touchY}
-            isDark={isDark}
-          />
-          <ElasticSVG
-            side="right"
-            pullX={rightPullX}
-            touchY={touchY}
-            isDark={isDark}
-          />
 
         </View>
       </GestureDetector>
