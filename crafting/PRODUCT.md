@@ -16,6 +16,8 @@ Una aplicación móvil orientada a la práctica **activa** de idiomas (inglés y
 
 2. **Roleplay Mode** — práctica activa estructurada con escenarios sugeridos por IA, máscara de teatro como entrada, "dado" para re-sortear tema, sesión soft-target de ~5 min. Al aceptar un escenario, la IA adopta un personaje con mood y estilo fijos (rol implícito en el texto del escenario) que mantiene hasta el cierre narrativo. Detalle completo en [ROLEPLAY.md](ROLEPLAY.md).
 
+2.5. **Guided Practice Mode** — tercer modo conversacional que fuerza producción activa de expresiones B2 (phrasal verbs, palabras "rare-but-useful" como *hence*, *glance*). Tras cada turno de la IA, la app emite 4 chips de expresión sugerida (mix de tus tracked_items + corpus B2 curado + sugerencia contextual del LLM); el usuario debe intentar usar una. Si no, la IA hace re-prompt suave invitándolo a reformular (sin enforcement duro). El LLM decide cuándo emitir chips (salta saludos y small-talk). Detalle completo en [GUIDED_PRACTICE.md](GUIDED_PRACTICE.md).
+
 3. **Feedback estructurado post-sesión** — pantalla con transcripción navegable, marcado a color (🔴 errores graves / 🟡 advertencias-estrategias horizontales / 🔵 mejoras), spans clickeables con preview y deep-dive flotante voz↔voz. Librería de errores con pesos que alimenta SRS y nudges implícitos al LLM. Detalle completo en [FEEDBACK.md](FEEDBACK.md).
 
 4. **YouTube Video Context (Gemini Integration):**
@@ -32,6 +34,7 @@ Una aplicación móvil orientada a la práctica **activa** de idiomas (inglés y
    - Genera archivos Markdown estructurados con enlaces (Backlinks `[[tag]]`) compatibles con Obsidian para conectar conocimiento.
 
 ## Funcionalidades Secundarias
+- **Vocabulary Catalog** — catálogo personal browsable de palabras y expresiones que el usuario *ya domina* o *quiere adoptar conscientemente*. Distinto del SRS (que entrena items débiles) y de `tracked_items` (que registra errores). Se llena por 3 vías: promoción automática cuando un tracked_item se gradúa (`weight ≤ 0` + retención 14d), sugerencia post-sesión de palabras B2+ que dijo la IA, y adición manual desde la transcripción del feedback. Filtros anti-ruido por CEFR floor configurable. Detalle en [VOCABULARY_CATALOG.md](VOCABULARY_CATALOG.md).
 - **SRS Phrasal Verbs (EN-only)** — sección de repaso espaciado de las expresiones donde el usuario más se equivoca, derivada de los `tracked_items` del feedback. Detalle en [FEEDBACK.md](FEEDBACK.md).
 - **Pronunciation Score** — evaluación fonética asíncrona después de cada turno del usuario: score 0-100 con breakdown por zona de pronunciación. Implementado con Azure Speech Pronunciation Assessment (o Speechace API como alternativa). Se muestra como un badge pequeño debajo de la burbuja del usuario en el FeedbackScreen. No bloquea el flujo ni la conversación.
 - **Shadow Reading Mode** — la IA pronuncia una frase (TTS) y el usuario la repite en voz alta. Whisper transcribe la repetición y el LLM evalúa precisión, velocidad (palabras/min) y naturalidad. Accesible como sub-sección dentro del área SRS (swipe derecho). Diferenciador técnico frente a Duolingo/apps genéricas; trabaja la prosodia y el acento.

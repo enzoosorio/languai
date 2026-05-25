@@ -116,6 +116,19 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **3.6** 🎨 Haptics: tap suave al iniciar grabación, doble vibración cuando empieza respuesta de IA.
 - [ ] **3.7** ✅ Loop end-to-end: hablo en Home → veo "Processing..." → escucho respuesta IA. Probar en EN y DE. Probar audio < 2s → debe ignorarse sin error.
 
+## Fase 3.7 — Focus Mode UI + End-of-conversation detection
+
+> Foco: separar visualmente el modo "idle" del modo "en conversación", agregar detección de despedida vía tool call, sentar las bases para el flujo `closing → summary`. Detalle completo en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md).
+
+- [ ] **3.7.1** 🎨 Implementar fade progresivo en `HomeScreen`: 3 niveles (Normal / Focus parcial / Focus completo). Animar opacity de edges + swipe disable con `Animated`/`Reanimated`.
+- [ ] **3.7.2** 🎨 Botón "End conversation" en footer durante focus completo (oculto en idle). Usar `colors.danger` con glass tint.
+- [ ] **3.7.3** 🎨 Botón Back ← top-left durante focus. Tap → modal de confirmación si `turnIndex >= 2`: "Discard this conversation? Progress won't be saved." [Discard] / [Keep talking].
+- [ ] **3.7.4** 🧠 Agregar tool `end_conversation` al request del `chat-turn` Edge Function con schema definido en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md) §3.2.
+- [ ] **3.7.5** 🧠 En la app, leer `tool_calls` de la respuesta del chat-turn. Si `confidence >= 0.85` → set `sessionStore.endRequested = true` → reproducir audio del `ai_text` final → trigger flujo `closing`.
+- [ ] **3.7.6** 🧠 Si `0.50 <= confidence < 0.85` → setear `sessionStore.pendingClose = true`. Si el próximo turno del usuario es <5 palabras y afirmativo → cerrar. Si no → reset `pendingClose`.
+- [ ] **3.7.7** 🎨 Componente `<SessionClosingScreen />` (loader full-screen) — texto "Wrapping up your conversation…" + spinner + skeleton del summary. Timeout 8s → mostrar opción "View partial summary".
+- [ ] **3.7.8** ✅ Conversación libre con focus mode: tap mic → ver fade parcial → recibir respuesta IA → ver focus completo. Decir "see you later" → IA cierra. Decir "And I said goodbye to him" → IA NO cierra. Tapear End → ver loader.
+
 ## Fase 3.5 — Pronunciation Score
 
 - [ ] **3.5.1** 🧠 Edge Function `score-pronunciation` (Deno, asíncrona): recibe `{ audio_b64, transcript, lang }`, llama a Azure Speech Pronunciation Assessment API, devuelve `{ score: 0-100, breakdown: {...} }`.
@@ -133,7 +146,9 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 5 — Feedback core (pipeline + UI básica)
 
-- [ ] **5.1** 🧠 Edge Function `generate-feedback` (Deno, asíncrona): recibe `session_id`, lee turnos, llama LLM con prompt estructurado, retorna JSON validado (ver [FEEDBACK.md](FEEDBACK.md)).
+- [ ] **5.0** 🧠 Edge Function `analyze-turn` (Deno, async per-turn): recibe `{turn_id, prev_turns[]}`, llama DeepSeek V4 Flash, escribe annotations parciales en `feedback_annotations`. Disparada fire-and-forget desde `chat-turn` después de cada turno del usuario. Pre-computa el feedback durante la sesión para bajar latencia del cierre.
+- [ ] **5.0b** 🧠 Setup de LanguageTool: decidir self-host (Docker) vs cloud free tier. Crear wrapper en `src/lib/languagetool.ts` para llamadas desde Edge Function. Solo EN + DE por ahora.
+- [ ] **5.1** 🧠 Edge Function `generate-feedback` (Deno, asíncrona): recibe `session_id`, lee turnos + annotations pre-computadas. **Paralelo:** llama DeepSeek V4 Pro para análisis cross-turn Y LanguageTool para validación sintáctica. Merge con dedupe (LLM gana en colisiones de span). Ver [FEEDBACK.md](FEEDBACK.md) + [MODELS.md](MODELS.md).
 - [ ] **5.2** 🧠 Validador JSON con **2 reintentos**: retry 1 con prompt más estricto; retry 2 con prompt mínimo de campos obligatorios. Si ambos fallan, setear `feedback_status = 'failed'`.
 - [ ] **5.3** 🎨 Estado de error de feedback: cuando `feedback_status = 'failed'`, mostrar popup en la app con opción de completar campos manualmente (HITL) o descartar.
 - [ ] **5.4** 🗄️ Persistir resultados de `generate-feedback`: `feedback_annotations` + upsert a `tracked_items` (acumular `weight`, actualizar `last_seen_session`) + setear `sessions.summary` y `sessions.tags`.
@@ -199,11 +214,16 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 10 — RAG / Memoria a largo plazo
 
-- [ ] **10.1** 🧠 Edge Function `extract-facts`: al cerrar sesión, LLM pequeño extrae 3-8 hechos atómicos sobre el usuario en oraciones independientes.
-- [ ] **10.2** 🗄️ Tabla `user_facts(id, user_id, text, embedding vector(1536), source_session, created_at)`.
-- [ ] **10.3** 🧠 Generar embeddings (OpenAI `text-embedding-3-small`) y guardar en `user_facts.embedding`.
-- [ ] **10.4** 🧠 En `buildSystemPrompt` (Fase 9.6), antes de iniciar sesión: embed del primer mensaje del usuario o del scenario, buscar top-5 hechos similares con `<=>`, inyectarlos como contexto.
-- [ ] **10.5** ✅ Mencionar algo en sesión 1 → comprobar que la IA lo recuerda en sesión 2.
+> Implementación según el pipeline refinado en [MEMORY_SYSTEM.md](MEMORY_SYSTEM.md) §1.
+
+- [ ] **10.1** 🗄️ Migración 006: `ALTER TABLE user_facts` agregando `superseded_by uuid`, `confidence float`, `needs_clarification bool`, `topic_tags text[]`. Aplicar.
+- [ ] **10.2** 🧠 Edge Function `extract-facts` (DeepSeek V4 Flash): dispara cada 3 turnos del usuario durante la sesión + pasada final al cerrar. Extrae 3-8 hechos atómicos.
+- [ ] **10.3** 🧠 Sub-función `judge-fact` (DeepSeek V4 Pro): para cada candidate, embed → pgvector retrieval top-5 (distancia <0.45) → si hay candidatos, LLM judge clasifica en 5 categorías (IDEMPOTENT / REFINES / CONTRADICTS / CONTEXT_DEPENDENT / UNRELATED).
+- [ ] **10.4** 🗄️ Acciones según verdict: IDEMPOTENT=discard, REFINES=UPDATE, CONTRADICTS=set `superseded_by` + INSERT, CONTEXT_DEPENDENT=INSERT con `needs_clarification=true`, UNRELATED=INSERT directo.
+- [ ] **10.5** 🧠 En `buildSystemPrompt` (Fase 9.8), antes de iniciar sesión: embed del primer mensaje del usuario o del scenario, buscar top-5 hechos similares (`WHERE superseded_by IS NULL`), inyectarlos como `[MEMORY]`.
+- [ ] **10.6** 🧠 Feature de aclaración: en `chat-turn`, detectar si algún fact con `needs_clarification=true` tiene intersección de tópicos con el último turno del usuario. Si sí, inyectar nota `[PENDING CLARIFICATION]` en el system prompt (ver [MEMORY_SYSTEM.md](MEMORY_SYSTEM.md) §1.5).
+- [ ] **10.7** 🧠 Al detectar que el usuario respondió a una clarification: marcar el fact viejo con `superseded_by` apuntando al nuevo, y el nuevo con `needs_clarification=false`.
+- [ ] **10.8** ✅ Sesión 1: "Me gusta la ensalada". Sesión 2: "No me gustan las verduras". Verificar que se crea fact `needs_clarification=true`. Sesión 3 hablando de comida → la IA debería preguntar la aclaración. Responder → verificar resolución en DB.
 
 ## Fase 11 — YouTube Context (Gemini)
 

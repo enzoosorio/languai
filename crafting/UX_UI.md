@@ -28,14 +28,33 @@ El paradigma principal es el "Anti-Scroll" y "Cero Fricción". El usuario debe a
 
 1. **Pantalla Home (Core)**
    - **Header:**
-     - Botón selector fluido de Idioma (🇪🇸/🇺🇸 EN B2 \/ 🇩🇪 DE A1) arriba a la derecha. 
-     - Streak/Racha sutil (🔥 14) en la esquina superior izquierda.
+     - Botón selector fluido de Idioma (🇪🇸/🇺🇸 EN B2 \/ 🇩🇪 DE A1) arriba a la derecha. Tap → modal de selección de idioma + nivel CEFR.
+     - Streak/Racha sutil (🔥 14) en la esquina superior izquierda. **Long-press (600ms)** → toggle dark/light theme (no hay botón dedicado para reducir clutter).
    - **Centro:**
-     - Botón circular masivo. Cambia de estado: "Tap to Speak", "Listening...", "Processing..." o un simple ícono de micrófono.
-     - Interacciones hápticas (Vibración suave al presionar, vibración doble cuando la IA empieza a responder).
+     - Botón circular masivo. Tap-toggle (no press-and-hold, decisión documentada en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md)). Cambia de estado: "Tap to Speak", "Listening… tap to send", "Processing…", "Speaking…".
+     - Interacciones hápticas (vibración suave al presionar, doble vibración cuando la IA empieza a responder).
    - **Bottom:** 
      - Input text con "borde radius alto" (forma de píldora). Placeholder: "Paste a YouTube link...".
      - Al tocarlo: El fondo hace overlay oscuro (Blur), el teclado se levanta y se permite pegar el link. Al darle "Go" -> Haptic feedback sutil (success) e indicador visual de "Context Loaded".
+
+### 1.1 Focus Mode (durante conversación activa)
+
+Cuando el usuario está conversando, la UI **gradualmente** se concentra en el mic central para evitar gestos accidentales y reforzar el "modo flow". Ver el detalle de estados y transiciones en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md).
+
+**Tres niveles de focus (fade progresivo):**
+
+| Nivel | Cuándo | Visual |
+|---|---|---|
+| **Normal** | Estado `idle`, sin sesión activa | UI completa: pills, swipes, edge buttons (🎭 📚), YouTube píldora |
+| **Focus parcial** | Tap 1 → mientras se graba o procesa el primer turno | Edge buttons + swipes fade a `opacity: 0.3`, gestos swipe bloqueados. Pills siguen visibles. |
+| **Focus completo** | Después de la primera respuesta de IA recibida → sesión persistida (`isActive = true`) | Edge buttons, swipes y YouTube píldora ocultos. Aparecen: botón **End conversation** (footer, glass danger) + botón **Back ←** (top-left, descartar sesión con confirmación si ≥2 turnos). Pills minimizadas opcionalmente. |
+
+**Salida del focus:**
+- "End conversation" → trigger del flujo `closing → summary` (loader → FeedbackScreen)
+- "Back" → modal de confirmación → discard sin guardar feedback
+- IA detecta despedida via tool call → cierre automático (ver [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md) §3)
+
+**Animación:** fade progresivo de 250ms easing `ease-out` entre niveles. Reversible: si el audio se descarta (<2s) sin haber persistido un turno, vuelve suavemente a Normal.
    
 2. **Pantalla Roleplay / Scenarios (Navegación Secundaria)** — detalle completo en [ROLEPLAY.md](ROLEPLAY.md).
    - **Acceso doble**: swipe izquierdo desde Home (primario) **+** botón máscara de teatro 🎭 en una esquina (fallback descubrible).
