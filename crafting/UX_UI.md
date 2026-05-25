@@ -22,7 +22,7 @@ El paradigma principal es el "Anti-Scroll" y "Cero Fricción". El usuario debe a
    - **Paso 1 — Idioma nativo:** Selector de idioma nativo del usuario (ej. Español, Inglés, Francés). Se guarda en `user_settings.native_language`.
    - **Paso 2 — Idiomas a practicar:** Toggle multi-select (MVP: EN 🇺🇸 y/o DE 🇩🇪). El usuario puede elegir uno o ambos simultáneamente.
    - **Paso 3 — Nivel por idioma:** Selector de nivel CEFR (A1 / A2 / B1 / B2 / C1) para cada idioma elegido. Por defecto: EN → B2, DE → A1.
-   - **Paso 4 — Tour de funciones clave:** 3-4 tarjetas swipeables que muestran: botón central (conversación libre), swipe izq (Roleplay), swipe der (SRS + Shadow Reading).
+   - **Paso 4 — Tour de funciones clave:** 3-4 tarjetas swipeables que muestran: botón central (conversación libre + modos Free/Roleplay/Guided), swipe izq (Vocabulary Hub), swipe der (SRS Flashcards).
    - **Paso 5 — Conectar GitHub (opcional):** Instrucciones para obtener un Personal Access Token + ingresar nombre del repo de Obsidian. Se puede omitir con "Ahora no" y configurar después desde Ajustes.
    - **Finalizar:** Marca `onboarding_completed = true` y navega directamente al Home.
 
@@ -33,6 +33,13 @@ El paradigma principal es el "Anti-Scroll" y "Cero Fricción". El usuario debe a
    - **Centro:**
      - Botón circular masivo. Tap-toggle (no press-and-hold, decisión documentada en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md)). Cambia de estado: "Tap to Speak", "Listening… tap to send", "Processing…", "Speaking…".
      - Interacciones hápticas (vibración suave al presionar, doble vibración cuando la IA empieza a responder).
+   - **Selector de modo** (compacto, arriba del botón principal):
+     - Pill selector: `[Free]` `[Roleplay]` `[🎯 Guided]`. El modo activo se resalta; tap cambia sin navegar a otra pantalla.
+     - El sub-label del botón principal cambia según modo: `"Free conversation"` / `"Choose a scenario"` / `"chips after the warm-up"`.
+     - Al seleccionar **Guided** → bottom-sheet de config (aparece una sola vez antes del primer turno de la sesión):
+       - Foco: `[ Mis errores ]` `[ Vocabulario B2 ]` `[ Mixto ]`
+       - Duración soft-target: `5 min` / `10 min`
+     - Al seleccionar **Roleplay** → abre flujo de selección de escenario con dado 🎲 (igual que antes, ahora iniciado desde Home). Detalle en [ROLEPLAY.md](ROLEPLAY.md).
    - **Bottom:** 
      - Input text con "borde radius alto" (forma de píldora). Placeholder: "Paste a YouTube link...".
      - Al tocarlo: El fondo hace overlay oscuro (Blur), el teclado se levanta y se permite pegar el link. Al darle "Go" -> Haptic feedback sutil (success) e indicador visual de "Context Loaded".
@@ -56,11 +63,32 @@ Cuando el usuario está conversando, la UI **gradualmente** se concentra en el m
 
 **Animación:** fade progresivo de 250ms easing `ease-out` entre niveles. Reversible: si el audio se descarta (<2s) sin haber persistido un turno, vuelve suavemente a Normal.
    
-2. **Pantalla Roleplay / Scenarios (Navegación Secundaria)** — detalle completo en [ROLEPLAY.md](ROLEPLAY.md).
-   - **Acceso doble**: swipe izquierdo desde Home (primario) **+** botón máscara de teatro 🎭 en una esquina (fallback descubrible).
-   - **Pantalla de selección**: una frase grande con el setup del roleplay generada por IA (ej. *"You're returning a defective laptop to a store"*) + botón **dado 🎲** que re-sortea con haptic y animación de rolling.
-   - La frase es tappable (padding generoso evita misclick con el dado) y equivale a "Aceptar". Botón "Aceptar" explícito como redundancia.
-   - **Pantalla de conversación**: idéntica al Home + banner sutil con el escenario + indicador no-agresivo de tiempo hacia el target de 5 min.
+2. **Vocabulary Hub (Vista Izquierda)** — accesible por swipe izquierdo desde Home + botón fallback.
+   - **Header:** "Vocabulary Hub" + contador total de entradas en el idioma activo.
+   - **Tab interno [📚 Catálogo]:**
+     - Search bar + filtros: `[ All ]` `[ Phrasal ]` `[ Words ]` `[ Idioms ]` + selector CEFR level.
+     - Cards con: expression, nivel CEFR, definición corta, badge de origen y estado.
+     - Badges por estado: `✨` usada post-catálogo · `⚠` activa en práctica · `🎯` graduada desde tracked_items · `🌱` sugerida post-sesión · `✋` manual.
+     - **Tap en card** → drawer con definición completa, ejemplos, sesiones relacionadas, campo `user_note` editable y botón "Open deep-dive".
+     - **Swipe izquierdo en card** → ocultar (`hidden = true`).
+   - **Tab interno [🔁 En práctica]:**
+     - Lista de `tracked_items` activos del idioma activo (misma lógica que el SRS actual).
+     - Cross-link: si un item cumple criterios de graduación (`weight ≤ 0` + `srs_state.interval ≥ 14d`), aparece CTA inline "→ Agregar al catálogo".
+   - Detalle completo en [VOCABULARY_CATALOG.md](VOCABULARY_CATALOG.md).
+
+> **Roleplay** ya no ocupa un slot de swipe — vive en el selector de modo del Home. Seleccionarlo abre el flujo de selección de escenario con dado 🎲 igual que antes. Detalle en [ROLEPLAY.md](ROLEPLAY.md).
+
+### 2.1 Componente Guided Practice Chips
+
+Aparecen debajo de la última burbuja de la IA cuando `session.mode = 'guided'` y la Edge Function `guided-chips` decide emitirlos. El LLM decide por turno si emitir o no según contexto (ver [GUIDED_PRACTICE.md §3](GUIDED_PRACTICE.md)).
+
+- **Layout:** 4 chips en fila; wrapping a 2×2 si no caben. Usan el componente `<Pill>` existente con variante visual `guided-chip`.
+- **Badge superior por chip:** `🎯 SRS` · `✨ B2` · `🌱 contextual` — indica al usuario por qué se lo propone.
+- **Tap corto** → tooltip con `hint_short`.
+- **Tap largo** → modal flotante con `hint_example` + speaker icon (TTS del ejemplo vía pipeline existente de TTS).
+- **Animación de aparición:** stagger uno a uno (~80-100ms entre chips), fade-in + slide-up (`translateY: 12px → 0`), easing `cubic-bezier(0.22, 1, 0.36, 1)` (out-expo). Total ~400ms. Ver [ELASTIC_UI.md](ELASTIC_UI.md).
+- **Re-prompt suave:** si el usuario habla sin usar ningún chip, la IA invita a reformular y los chips originales se vuelven a destacar sin llamada adicional al backend.
+- **Cooldown:** si el usuario ignora chips 2 turnos seguidos, se pausan por 2 turnos para evitar sensación de acoso.
 
 3. **Pantalla de Feedback** (post-sesión) — detalle completo en [FEEDBACK.md](FEEDBACK.md).
    - Burbujas de chat glassmórficas estilo iMessage con la transcripción completa.
@@ -71,6 +99,13 @@ Cuando el usuario está conversando, la UI **gradualmente** se concentra en el m
    - **Tap en span** → tooltip preview con explicación corta.
    - **Tap en preview** → expande a pantalla de **deep-dive** dedicada (voz↔voz) sobre esa palabra/frase.
    - **Minimizar el deep-dive** → un **circulito flotante** (draggable) queda en una esquina. **Solo 1 activo a la vez**: abrir otro reemplaza el actual (confirmación si tiene > N turnos).
+   - **Post-sesión guiada — sección "Guided Practice Summary"** (solo si `session.mode = 'guided'`, al tope del FeedbackScreen):
+     - Chips ofrecidos / usados / % usage rate.
+     - Lista de expresiones practicadas con `✓` (usada al menos 1 vez) o `⚠` (ofrecida pero nunca usada).
+   - **Post-sesión — sección "New for your catalog"** (si `generate-feedback` detecta candidatos B2+):
+     - Lista de ≤5 palabras/expresiones que la IA usó en la sesión y el usuario aún no tiene en su catálogo.
+     - Checkboxes para seleccionar cuáles agregar + botones "Agregar seleccionadas" / "Saltar".
+     - Si no hay candidatos relevantes, la sección no aparece.
 
 4. **Pantalla de Histórico** — lista de cards con sesiones pasadas, cada card con título / fecha / duración / tags / contadores por color. Tap → reabre el feedback navegable. Detalle en [FEEDBACK.md](FEEDBACK.md).
 
