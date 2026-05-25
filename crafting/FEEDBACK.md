@@ -167,10 +167,10 @@ Un tracked item está listo para graduarse cuando:
 - Y `srs_state.interval >= 14` (14 días desde el último repaso — retención confirmada)
 
 Cuando ambas condiciones se cumplen, la app muestra una sugerencia suave (no-intrusiva):
-> *"Parece que ya dominas 'run into' — ¿archivarlo?"*
-> [**Archivar**] [Seguir practicando]
+> *"Parece que ya dominas 'run into' — ¿agregarlo a tu catálogo?"*
+> [**Agregar al catálogo**] [Seguir practicando]
 
-- **Al archivar:** `tracked_items.archived = true`. El item deja de aparecer en el SRS activo y en los nudges del LLM, pero se guarda en una sección "Graduados" consultable. No se elimina de la DB.
+- **Al agregar al catálogo:** se crea fila en `vocabulary_catalog` con `source = 'promoted_from_tracked'` (ver [VOCABULARY_CATALOG.md](VOCABULARY_CATALOG.md)) y el `tracked_item` se marca `archived = true`. El item deja de aparecer en el SRS activo y en los nudges del LLM. La entrada en el catálogo es **permanente**: si el usuario vuelve a fallar con esa palabra en el futuro, se crea un *nuevo* `tracked_item` (no se reactiva el viejo) y el catálogo queda intacto, con badge "⚠ activo en práctica".
 - **Al ignorar:** El item sigue activo. La sugerencia reaparece si las condiciones se mantienen en la siguiente sesión.
 
 ## Error Pattern Detection
