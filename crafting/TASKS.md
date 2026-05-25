@@ -212,6 +212,27 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **9.5.5** 🗄️ Persistir resultados de shadow reading por sesión (tabla `shadow_sessions` o campo en `sessions`).
 - [ ] **9.5.6** ✅ Escuchar frase → repetir → ver score de precisión + WPM + feedback. Probar con frase fácil y frase difícil.
 
+## Fase 9.7 — Guided Practice + Vocabulary Catalog
+
+- [ ] **9.7.1** 🗄️ Aplicar migración 006 en Supabase: tablas `b2_expressions_corpus`, `user_corpus_exposure`, `vocabulary_catalog`, `vocabulary_definitions_cache` + ALTER `sessions.mode` y `session_turns` (chips_offered, chips_used, constraint_status). Verificar RLS de cada objeto.
+- [ ] **9.7.2** 🗄️ Data migration 006b: seed de ~150 expresiones en `b2_expressions_corpus` (phrasal verbs + conjunciones + colocaciones de Oxford Learner's / Cambridge English). Script SQL curado, aplicar como migración independiente.
+- [ ] **9.7.3** 🧠 Edge Function `guided-chips` (Deno): recibe `{session_id, turn_id, focus: 'srs'|'b2'|'mixed'}`, consulta `tracked_items` del usuario + `b2_expressions_corpus` filtrado por tags, llama DeepSeek V4 Flash, devuelve `{should_emit_chips, chips[{expression,source,hint_short,hint_example}]}`. Guard clause: no emitir en los primeros 2 turnos.
+- [ ] **9.7.4** 🧠 Fuzzy match client-side en `src/lib/guidedChips.ts`: Levenshtein normalizado por lemma (threshold ≥ 0.8). Función `detectChipUsage(userText, chips[]) → {matched[], constraint_status}`. Tests unitarios con casos edge ("shown up" → "show up", "fell behind" → "fall behind").
+- [ ] **9.7.5** 🎨 Componente `<ModePicker />` en `HomeScreen`: pill selector `[Free] [Roleplay] [🎯 Guided]`. Persiste en `useSessionStore.selectedMode`. Sub-label dinámico del botón principal según modo activo.
+- [ ] **9.7.6** 🎨 Bottom-sheet `<GuidedConfigSheet />`: foco `[Mis errores] [Vocabulario B2] [Mixto]` + duración `[5 min] [10 min]`. Aparece una sola vez antes del primer turno de una sesión Guided. Guarda en `useSessionStore.guidedConfig`.
+- [ ] **9.7.7** 🎨 Componente `<GuidedChips />`: 4 pills con stagger animation (Reanimated, 80ms entre chips, fade-in + translateY 12→0, out-expo). Badge superior por `source` (🎯/✨/🌱). Tap corto → tooltip `hint_short`. Tap largo → modal con `hint_example` + speaker TTS.
+- [ ] **9.7.8** 🧠 Integración chip flow: en cada turno IA dentro de `mode=guided`, llamar `guided-chips` en paralelo. Si `should_emit_chips=true`, renderizar `<GuidedChips />`. Post-STT: correr `detectChipUsage`, actualizar `chips_offered`/`chips_used`/`constraint_status` en `session_turns`.
+- [ ] **9.7.9** 🧠 Re-prompt suave: si `constraint_status='skipped'`, añadir al siguiente system prompt la frase de invitación ("Nice — could you try using one of these?"). Re-destacar los chips originales en UI sin nueva llamada a `guided-chips`.
+- [ ] **9.7.10** 🧠 Cooldown de chips: en `useSessionStore`, trackear contador de turnos consecutivos `skipped`. Si ≥ 2, activar `chipsCooldown = 2` (decrementar por turno). Durante cooldown no llamar a `guided-chips`.
+- [ ] **9.7.11** 🎨 Pantalla `VocabularyHubScreen` (reemplaza el slot de swipe izquierdo): header con contador + tab bar `[📚 Catálogo] [🔁 En práctica]`. Actualizar `PagerView` en navegación principal.
+- [ ] **9.7.12** 🎨 Tab [📚 Catálogo]: search bar + filtros por categoría (All / Phrasal / Words / Idioms) + nivel CEFR. `FlatList` virtualizada de cards con expression, nivel, definición corta, badges de origen/estado. Swipe izq en card → `hidden = true`.
+- [ ] **9.7.13** 🎨 Drawer de detalle del catálogo: definición, ejemplos, sesiones relacionadas, campo `user_note` editable inline, botón "Open deep-dive". Reutiliza `<GlassCard />` y el pipeline de deep-dive existente.
+- [ ] **9.7.14** 🗄️ Sección "New for your catalog" en `FeedbackScreen`: lista de ≤5 candidatos B2+ generados por `generate-feedback` (palabras que la IA usó, no en catálogo del usuario). Checkboxes + botón "Agregar seleccionadas". INSERT en `vocabulary_catalog` con `source='post_session_suggestion'`.
+- [ ] **9.7.15** 🎨 Sección "Guided Practice Summary" al tope del `FeedbackScreen` (solo `session.mode='guided'`): chips ofrecidos, usados, % usage rate + lista de expresiones con ✓/⚠.
+- [ ] **9.7.16** 🧠 Lógica de graduación `promoted_from_tracked`: cuando `tracked_item.weight ≤ 0` AND `srs_state.interval ≥ 14`, mostrar CTA "→ Agregar al catálogo" en tab [🔁 En práctica]. Al aceptar: INSERT en `vocabulary_catalog` con `source='promoted_from_tracked'`, marcar `archived=true`, llamar LLM para `definition`+`example` si no hay caché en `vocabulary_definitions_cache`.
+- [ ] **9.7.17** 🗄️ KPIs del modo Guided: calcular `chip_offer_rate`, `chip_usage_rate`, `new_expressions_practiced` al cerrar sesión en `generate-feedback` y persistir (columna en `sessions` o tabla auxiliar). Exponer en `StatsScreen` (Fase 13.5).
+- [ ] **9.7.18** ✅ E2E sesión guiada: seleccionar Guided → config foco → conversar 5+ turnos → ver chips aparecer con stagger → usar al menos 2 → cerrar → ver "Guided Practice Summary" + "New for your catalog" → aceptar 1 entrada → verificar en tab [📚 Catálogo]. Verificar que Roleplay desde modo selector del Home sigue funcionando.
+
 ## Fase 10 — RAG / Memoria a largo plazo
 
 > Implementación según el pipeline refinado en [MEMORY_SYSTEM.md](MEMORY_SYSTEM.md) §1.
