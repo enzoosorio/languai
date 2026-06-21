@@ -164,6 +164,24 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **5.13** 🗄️ Persistir `used_nudge_items` por sesión. Al cerrar, mostrar en FeedbackScreen: *"Expresiones practicadas hoy: 'run into' ✓"* con badge en el SRS.
 - [ ] **5.14** ✅ Sesión real → recibir feedback con colores → ver tooltip → rechazar span → verificar cambio de weight → ver Pattern Insight si aplica.
 
+### Fase 5.A — Fix de anotaciones + UX del FeedbackScreen (2026-06-21)
+
+> **Bug raíz encontrado:** `feedback_annotations` quedaba SIEMPRE vacía (spans/tooltips/rechazo no funcionaban) aunque `tracked_items` sí se poblaba. Dos causas: (1) el LLM devolvía offsets de caracteres `[start,end]` poco fiables + matching de turno por texto exacto que fallaba; (2) las anotaciones nunca se vinculaban a su `tracked_item_id`.
+
+- [x] **5.A.1** 🧠 Reescribir `generate-feedback` con modelo unificado: el LLM copia el substring del error **verbatim**; el span se calcula en código con `indexOf` (determinístico). Cada anotación con `track:true` hace upsert del `tracked_item` y vincula `tracked_item_id`. → arregla A1, A2, B1–B4, C1–C4, F2.
+- [x] **5.A.2** 🎨 **TITULO-FEEDBACK-TRUNCATION**: el título del header se trunca con `…`; tap → píldora expandida en z-index con el título completo; tap fuera → cierra.
+- [ ] **5.A.3** ✅ Re-desplegar `generate-feedback` y verificar en **sesión nueva**: spans de 3 colores visibles, tooltip abre/cierra, "Not an error" archiva y baja weight, `feedback_annotations` poblada con `tracked_item_id`.
+
+### Fase 5.B — PARTIAL-SUMMARY-STREAMING (EDA / Realtime)
+
+> **Motivación:** hoy el flujo es síncrono — spinner bloqueante hasta que `generate-feedback` termina, y el botón "View partial summary" es vestigial (solo oculta el spinner; el feedback igual llega al resolver el await). La conversación YA está en DB, así que se puede mostrar al instante y pintar el análisis progresivamente. RN `fetch` no soporta streaming de tokens fiable → usar **Supabase Realtime** como bus de eventos.
+
+- [ ] **5.B.1** 🗄️ Habilitar Realtime (publication `supabase_realtime`) en `feedback_annotations` y `sessions`. Verificar que las políticas RLS permiten al usuario escuchar solo sus filas.
+- [ ] **5.B.2** 🧠 Reordenar el flujo en `App.tsx`/`HomeScreen`: al cerrar sesión válida, abrir `FeedbackScreen` **inmediatamente** (con la conversación ya persistida) en estado "analyzing…", e invocar `generate-feedback` en background (fire-and-forget) en vez de `await` bloqueante.
+- [ ] **5.B.3** 🎨 `FeedbackScreen` suscribe `postgres_changes`: INSERT en `feedback_annotations` (filtrado por los `turn_id` de la sesión) → pinta cada span al llegar; UPDATE en `sessions` → pinta `summary` + `tags` cuando se materializan. Shimmer sutil mientras `feedback_status != 'done'`.
+- [ ] **5.B.4** 🎨 Reemplazar "View partial summary" por el estado real de streaming (la pantalla ya es la "partial"); quitar el botón vestigial del `SessionClosingScreen` (o reducir el rol del spinner a un fade de transición < 1s).
+- [ ] **5.B.5** ✅ Cerrar sesión → ver la conversación al instante → ver spans/summary/tags aparecer progresivamente vía Realtime → estado final `done` sin recarga.
+
 ## Fase 6 — Deep-dive flotante
 
 - [ ] **6.1** 🎨 Pantalla `DeepDiveScreen` enfocada en un `tracked_item`: explicación completa, ejemplos de uso, botón micrófono (reusa pipeline de Fase 3).
@@ -304,17 +322,17 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **UI.A.4** 🎨 Actualizar Figma para eliminar el **borde lima `rgba(225,243,125,0.1)`** de las cards de historial (frame 63:1546, vars `fill_12d6ed7e`). DESIGN_SYSTEM § 8 ya lo marca como anti-pattern pero el archivo de Figma no fue resincronizado.
 - [ ] **UI.A.5** 🎨 Actualizar Figma del Home (frame 53:325): hay **3 squircles apilados** (53:332/333/334) replicando el mic con `el efecto`. Viola "nunca el mismo tier apilado" del § 4. Quedarse con 1 squircle + sonar ring.
 - [ ] **UI.A.6** 🎨 Resync **YouTube pill**: Figma frame 65:1837 usa `borderRadius: 32px` + text Bricolage ExtraLight 200 16px; código usa `borderRadius: 20px` + Darker Grotesque 400 13px. Definir cuál es la verdad y alinear.
-- [ ] **UI.A.7** 🎨 **DECISIÓN 2026-06-21**: **Agregar tier `medium`** al sistema de glassmorphism. Valores: `fill: rgba(255,255,255,0.56)`, `stroke: rgba(255,255,255,0.74)`, `blur: 20`. Añadir a `theme/index.ts → glass.medium`, a `GlassCard.tsx` (nuevo `tier="medium"`), y documentar en `DESIGN_SYSTEM.md § 4`.
+- [x] **UI.A.7** 🎨 ~~Agregar tier `medium`~~ → **HECHO 2026-06-21**: tier `medium` añadido a `theme/index.ts → glass.medium` (fill 0.56, border 0.74, blur 30/38), soportado por `GlassCard` (`tier` ahora es `GlassTier`) y documentado en `DESIGN_SYSTEM.md § 4`. Aplicación a la scenario card real queda pendiente para cuando se construya Roleplay (hoy es placeholder).
 - [ ] **UI.A.8** 🎨 Generar **mockups dark mode** en Figma para los 4 frames clave (todos están en light `#FFFFFF` o gris `#DADADA`). Sin mockup dark, "Light mode parity audit" (13.6) no es verificable bidireccionalmente.
 - [ ] **UI.A.9** 🎨 Revisar frame 58:783 (mockup viejo con fill `#DADADA` + texto `#000` puro + Plus Jakarta Sans 14). Verificar si es Login/Onboarding deprecado y eliminarlo o actualizarlo a paleta vigente.
 
 ### B · Glassmorphism (consolidación técnica)
 
-- [ ] **UI.A.10** 🎨 Unificar **dos implementaciones de glass**: hoy conviven `GlassCard` (blur 16/27) y `GlassLayers` inline en `HomeScreen` (blur 36/48). Decidir si `GlassLayers` se generaliza como nuevo tier (`mic`/`header`) en `glass = {...}` o si `GlassCard` absorbe los blur intensos.
-- [ ] **UI.A.11** 🎨 Implementar el **"el efecto" liquid glass** de Figma (`boxShadow` con insets blancos + outer 48px) en `GlassCard`. Hoy `GlassCard` solo tiene blur + fill + border plano → pierde la lectura 3D que el Figma propone (frames 53:343, 53:349). Evaluar si es viable con `react-native-shadow-2` o solo con `shadowColor`/`shadowRadius`.
-- [ ] **UI.A.12** 🎨 Hacer `surfaceSoft`/`surfaceStrong` **theme-aware**: hoy ambos modos usan los mismos `rgba(255,255,255,...)`. En dark, glass sobre `#0C0D0B` resulta en superficie casi blanca con texto crema `#F0EDE6` encima → **lectura ilegible** en cards. Definir `dark.surfaceSoft = rgba(255,255,255,0.10)` o similar (verificar contra Figma).
-- [ ] **UI.A.13** 🧠 Auditar **performance de BlurView**: HomeScreen renderiza 6+ `BlurView` simultáneos (header 3 + mic + YT + endBtn + modales). Medir FPS en Android low-end (Pixel 4a o emulador con throttle). Si <55fps, considerar `experimentalBlurMethod="dimezisBlurView"` o reducir blur en dispositivos lentos.
-- [ ] **UI.A.14** 🎨 Documentar **fallback de glass en Android**: `expo-blur` en Android <12 cae a fill sólido. Verificar que `surfaceGhost: 0.02` siga siendo legible sin blur real (probablemente no — necesita aumentar fill cuando se detecta no-blur).
+- [x] **UI.A.10** 🎨 ~~Unificar dos implementaciones de glass~~ → **HECHO 2026-06-21**: sistema único en `theme/index.ts` (`glass` per-mode + `resolveGlass(tier, isDark)`). `GlassLayers` inline extraído a componente reusable `src/components/GlassFill.tsx` (capas absolutas sin children); `GlassCard` (contenedor con children) ahora lee del mismo resolver. Cero magic numbers de blur duplicados. Tiers: ghost/soft/medium/strong/**frost** (el look translúcido del header/mic/YT que antes era `GlassLayers`).
+- [x] **UI.A.11** 🎨 ~~Implementar "el efecto" liquid glass~~ → **HECHO 2026-06-21**: prop `elevated` en `GlassCard` + preset `glassElevation` en theme. RN no soporta `box-shadow: inset`, así que se aproxima con drop shadow exterior + highlight de borde superior (`topHighlight`). No requirió `react-native-shadow-2`. Pendiente: aplicar `elevated` a las cards/mic que lo ameriten cuando se rediseñe cada pantalla.
+- [x] **UI.A.12** 🎨 ~~Hacer surfaces theme-aware~~ → **HECHO 2026-06-21**: en dark, los tokens FLAT `surface`/`surfaceSoft` bajaron de `white 0.47` a `white 0.10` (y `surfaceStrong` a 0.16, `surfaceGhost` a 0.04). Antes los chips/botones de modal (flat, sin blur) quedaban casi blancos con texto crema encima → ilegibles. Light mode sin cambios. Nota: los **fills de los tiers glass** (con BlurView detrás) siguen white-derived por diseño (§ 4).
+- [~] **UI.A.13** 🧠 **PARCIAL 2026-06-21**: `experimentalBlurMethod="dimezisBlurView"` añadido en Android tanto a `GlassCard` como a `GlassFill`. **Falta medir FPS real** en dispositivo/emulador Android low-end (no hay device en esta sesión) — dejar abierto hasta validar ≥55fps con 6+ BlurView simultáneos en Home.
+- [x] **UI.A.14** 🎨 ~~Fallback de glass en Android~~ → **HECHO 2026-06-21**: `dimezisBlurView` habilita blur real en Android; cuando el blur no rinde, el `fill` del tier sostiene la legibilidad. `surfaceGhost` subido a 0.04 para no desaparecer sin blur. Documentado en `GlassFill.tsx` y `DESIGN_SYSTEM § 4`.
 
 ### C · Tipografía (token discipline)
 

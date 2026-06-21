@@ -108,18 +108,32 @@ info:     rgba(74, 122, 211, 0.9) // azul para mejoras de feedback
 
 ---
 
-## 4. Efectos Glass — 3 Tiers
+## 4. Efectos Glass — 5 Tiers
 
 ### Filosofía
 El glass es la fuente de vida visual. Pero **se usan máximo 2 tiers distintos en la misma pantalla** y **nunca el mismo tier apilado** (evitar: nav bar `soft` + items `soft` → visual noise).
 
+### Arquitectura (post UI.A.10 — 2026-06-21)
+- **Fuente única de verdad:** `theme/index.ts → glass` + `resolveGlass(tier, isDark)`. No hay magic numbers de blur duplicados.
+- **Dos componentes, un sistema:**
+  - `GlassCard` — contenedor con `children` (cards, modales). Prop `elevated` para "el efecto".
+  - `GlassFill` — capas absolutas `blur + fill` sin children, para parents que ya gestionan layout/borde (header btns, mic, YT pill). Reemplaza el antiguo `GlassLayers` inline de HomeScreen.
+- **`blur` es per-mode:** en dark el `BlurView` necesita más intensidad para leerse. Los valores son `intensity` de expo-blur (0–100), NO px de CSS `backdrop-filter`.
+
 ### Definición de tiers
 
-| Tier | backdropBlur | Fill | Border | Uso |
+| Tier | blur (dark/light) | Fill (dark → light) | Border (dark → light) | Uso |
 |---|---|---|---|---|
-| `ghost` | 12px | rgba(255,255,255, 0.02) | rgba(255,255,255, 0.14) | Nav pills, swipe panels, elementos casi invisibles |
-| `soft` | 16px | rgba(255,255,255, 0.47) | rgba(255,255,255, 0.56) | Cards de historial, burbujas de chat, cards estándar |
-| `strong` | 27px | rgba(255,255,255, 0.75) | rgba(255,255,255, 0.74) | Card YouTube URL, modales, elementos de alto foco |
+| `ghost` | 8 / 6 | white 0.02 | white 0.14 | Nav pills, swipe panels, casi invisibles |
+| `soft` | 20 / 16 | white 0.47 | white 0.56 | Cards de historial, burbujas de chat, cards estándar |
+| `medium` | 30 / 38 | white 0.56 | white 0.74 | **Scenario card de Roleplay** (Figma 65:1830) — tier intermedio (UI.A.7) |
+| `strong` | 40 / 32 | white 0.75 | white 0.74 | Card YouTube URL, modales, alto foco |
+| `frost` | 36 / 48 | white 0.12 → black 0.08 | white 0.22 → black 0.12 | Header btns, mic, YT pill — translúcido, deja pasar el blob borroso. Único tier con fill mode-aware real |
+
+### "el efecto" — liquid glass 3D (UI.A.11)
+`GlassCard` con prop `elevated` aproxima la lectura 3D del Figma (frames 53:343, 53:349). RN no soporta `box-shadow: inset`, así que se compone:
+- **Drop shadow exterior** (`glassElevation` en theme) → la card "flota".
+- **Highlight de borde superior** (`topHighlight`) → simula el inset blanco del Figma.
 
 ### Regla de apilamiento (crítica)
 ```
