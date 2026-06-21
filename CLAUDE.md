@@ -61,6 +61,7 @@ Este archivo es el contexto de trabajo exclusivo para Claude (Sonnet 4.x). Defin
 - **Onboarding** de 5 pasos antes del primer uso (`onboarding_completed` en `user_settings`).
 - **Zero-friction:** audio < 2s → ignorar silenciosamente, sin llamar APIs.
 - Dark mode por defecto, glassmorphism, haptics consistentes.
+- **Solo app móvil nativa** (decisión 2026-06-21). No se soporta `react-native-web` ni PWA. No abrir scope web sin decisión explícita del dueño del producto.
 
 ### Feedback
 - Se genera **solo al final de sesión** (nunca en tiempo real).

@@ -108,26 +108,26 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 3 — Voice pipeline (modo libre MVP loop)
 
-- [ ] **3.1** 🧠 Servicio STT en `src/services/stt.ts` usando **Groq Whisper** API. Función `transcribe(audioBlob, lang) → text`.
-- [ ] **3.2** 🎨 Hook `useVoiceRecording()` con `expo-av`: tap start, tap stop, devuelve audio blob. Indicador visual "Listening...". **Edge case:** si la duración del audio < 2 segundos, descartar silenciosamente y volver a estado "Tap to Speak" sin llamar a Groq.
-- [ ] **3.3** 🧠 Extender Edge Function `chat-turn`: recibe `{ session_id, user_text, lang, level }`, llama al LLM vía proxy OpenCode con system prompt base, devuelve `{ ai_text }`.
-- [ ] **3.4** 🧠 Servicio TTS en `src/services/tts.ts` (OpenAI TTS para empezar — barato). Función `speak(text, lang) → audio URL`.
-- [ ] **3.5** 🎨 Animación de ondas sonoras (Reanimated) que reacciona al input/output de audio. Estados: idle / listening / processing / speaking.
-- [ ] **3.6** 🎨 Haptics: tap suave al iniciar grabación, doble vibración cuando empieza respuesta de IA.
-- [ ] **3.7** ✅ Loop end-to-end: hablo en Home → veo "Processing..." → escucho respuesta IA. Probar en EN y DE. Probar audio < 2s → debe ignorarse sin error.
+- [x] **3.1** 🧠 Servicio STT en `src/services/stt.ts` usando **Groq Whisper** API. Función `transcribe(audioBlob, lang) → text`.
+- [x] **3.2** 🎨 Hook `useVoiceRecording()` con `expo-av`: tap start, tap stop, devuelve audio blob. Indicador visual "Listening...". **Edge case:** si la duración del audio < 2 segundos, descartar silenciosamente y volver a estado "Tap to Speak" sin llamar a Groq.
+- [x] **3.3** 🧠 Extender Edge Function `chat-turn`: recibe `{ session_id, user_text, lang, level }`, llama al LLM vía proxy OpenCode con system prompt base, devuelve `{ ai_text }`. Incluye fetch de historial desde DB (últimos 20 turnos). Fix de race condition: `persistTurn(user)` se llama post-respuesta, no pre-request.
+- [x] **3.4** 🧠 Servicio TTS en `src/services/tts.ts` (OpenAI TTS para empezar — barato). Función `speak(text, lang) → audio URL`.
+- [x] **3.5** 🎨 Animación de ondas sonoras (Reanimated) que reacciona al input/output de audio. Estados: idle / listening / processing / speaking.
+- [x] **3.6** 🎨 Haptics: tap suave al iniciar grabación, doble vibración cuando empieza respuesta de IA.
+- [x] **3.7** ✅ Loop end-to-end: hablo en Home → veo "Processing..." → escucho respuesta IA. Probar en EN y DE. Probar audio < 2s → debe ignorarse sin error.
 
 ## Fase 3.7 — Focus Mode UI + End-of-conversation detection
 
 > Foco: separar visualmente el modo "idle" del modo "en conversación", agregar detección de despedida vía tool call, sentar las bases para el flujo `closing → summary`. Detalle completo en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md).
 
-- [ ] **3.7.1** 🎨 Implementar fade progresivo en `HomeScreen`: 3 niveles (Normal / Focus parcial / Focus completo). Animar opacity de edges + swipe disable con `Animated`/`Reanimated`.
-- [ ] **3.7.2** 🎨 Botón "End conversation" en footer durante focus completo (oculto en idle). Usar `colors.danger` con glass tint.
-- [ ] **3.7.3** 🎨 Botón Back ← top-left durante focus. Tap → modal de confirmación si `turnIndex >= 2`: "Discard this conversation? Progress won't be saved." [Discard] / [Keep talking].
-- [ ] **3.7.4** 🧠 Agregar tool `end_conversation` al request del `chat-turn` Edge Function con schema definido en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md) §3.2.
-- [ ] **3.7.5** 🧠 En la app, leer `tool_calls` de la respuesta del chat-turn. Si `confidence >= 0.85` → set `sessionStore.endRequested = true` → reproducir audio del `ai_text` final → trigger flujo `closing`.
-- [ ] **3.7.6** 🧠 Si `0.50 <= confidence < 0.85` → setear `sessionStore.pendingClose = true`. Si el próximo turno del usuario es <5 palabras y afirmativo → cerrar. Si no → reset `pendingClose`.
-- [ ] **3.7.7** 🎨 Componente `<SessionClosingScreen />` (loader full-screen) — texto "Wrapping up your conversation…" + spinner + skeleton del summary. Timeout 8s → mostrar opción "View partial summary".
-- [ ] **3.7.8** ✅ Conversación libre con focus mode: tap mic → ver fade parcial → recibir respuesta IA → ver focus completo. Decir "see you later" → IA cierra. Decir "And I said goodbye to him" → IA NO cierra. Tapear End → ver loader.
+- [x] **3.7.1** 🎨 Implementar fade progresivo en `HomeScreen`: 3 niveles (Normal / Focus parcial / Focus completo). Animar opacity de edges + swipe disable con `Animated`/`Reanimated`.
+- [x] **3.7.2** 🎨 Botón "End conversation" en footer durante focus completo (oculto en idle). Usar `colors.danger` con glass tint.
+- [x] **3.7.3** 🎨 Botón Back ← top-left durante focus. Tap → modal de confirmación si `turnIndex >= 2`: "Discard this conversation? Progress won't be saved." [Discard] / [Keep talking].
+- [x] **3.7.4** 🧠 Agregar tool `end_conversation` al request del `chat-turn` Edge Function con schema definido en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md) §3.2.
+- [x] **3.7.5** 🧠 En la app, leer `tool_calls` de la respuesta del chat-turn. Si `confidence >= 0.85` → set `sessionStore.endRequested = true` → reproducir audio del `ai_text` final → trigger flujo `closing`.
+- [x] **3.7.6** 🧠 Si `0.50 <= confidence < 0.85` → setear `sessionStore.pendingClose = true`. Si el próximo turno del usuario es <5 palabras y afirmativo → cerrar. Si no → reset `pendingClose`.
+- [x] **3.7.7** 🎨 Componente `<SessionClosingScreen />` (loader full-screen) — texto "Wrapping up your conversation…" + spinner + skeleton del summary. Timeout 8s → mostrar opción "View partial summary".
+- [x] **3.7.8** ✅ Conversación libre con focus mode: tap mic → ver fade parcial → recibir respuesta IA → ver focus completo. Decir "see you later" → IA cierra. Decir "And I said goodbye to him" → IA NO cierra. Tapear End → ver loader.
 
 ## Fase 3.5 — Pronunciation Score
 
@@ -139,24 +139,25 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 4 — Persistencia de sesiones
 
-- [ ] **4.1** 🗄️ Store Zustand `useSessionStore`: crea sesión al primer turno, mantiene `session_id`, idioma, modo (`free` por ahora).
-- [ ] **4.2** 🗄️ Función `persistTurn(session_id, speaker, text)` que escribe a `session_turns`. Llamarla después de cada STT (user) y cada respuesta LLM (ai).
-- [ ] **4.3** 🎨 Botón "End session" en Home (visible solo si hay sesión activa). Marca `sessions.ended_at`.
-- [ ] **4.4** ✅ Hablar 2-3 turnos, cerrar sesión, verificar filas en Supabase (`sessions`, `session_turns`).
+- [x] **4.1** 🗄️ Store Zustand `useSessionStore`: crea sesión al primer turno, mantiene `session_id`, idioma, modo (`free` por ahora).
+- [x] **4.2** 🗄️ Función `persistTurn(session_id, speaker, text)` que escribe a `session_turns`. Llamarla después de cada STT (user) y cada respuesta LLM (ai).
+- [x] **4.3** 🎨 Botón "End session" en Home (visible solo si hay sesión activa). Marca `sessions.ended_at`.
+- [x] **4.4** ✅ Hablar 2-3 turnos, cerrar sesión, verificar filas en Supabase (`sessions`, `session_turns`).
 
 ## Fase 5 — Feedback core (pipeline + UI básica)
 
-- [ ] **5.0** 🧠 Edge Function `analyze-turn` (Deno, async per-turn): recibe `{turn_id, prev_turns[]}`, llama DeepSeek V4 Flash, escribe annotations parciales en `feedback_annotations`. Disparada fire-and-forget desde `chat-turn` después de cada turno del usuario. Pre-computa el feedback durante la sesión para bajar latencia del cierre.
-- [ ] **5.0b** 🧠 Setup de LanguageTool: decidir self-host (Docker) vs cloud free tier. Crear wrapper en `src/lib/languagetool.ts` para llamadas desde Edge Function. Solo EN + DE por ahora.
-- [ ] **5.1** 🧠 Edge Function `generate-feedback` (Deno, asíncrona): recibe `session_id`, lee turnos + annotations pre-computadas. **Paralelo:** llama DeepSeek V4 Pro para análisis cross-turn Y LanguageTool para validación sintáctica. Merge con dedupe (LLM gana en colisiones de span). Ver [FEEDBACK.md](FEEDBACK.md) + [MODELS.md](MODELS.md).
-- [ ] **5.2** 🧠 Validador JSON con **2 reintentos**: retry 1 con prompt más estricto; retry 2 con prompt mínimo de campos obligatorios. Si ambos fallan, setear `feedback_status = 'failed'`.
-- [ ] **5.3** 🎨 Estado de error de feedback: cuando `feedback_status = 'failed'`, mostrar popup en la app con opción de completar campos manualmente (HITL) o descartar.
-- [ ] **5.4** 🗄️ Persistir resultados de `generate-feedback`: `feedback_annotations` + upsert a `tracked_items` (acumular `weight`, actualizar `last_seen_session`) + setear `sessions.summary` y `sessions.tags`.
-- [ ] **5.5** 🎨 Pantalla `FeedbackScreen` con header (título + tags + contadores 🔴🟡🔵) y body scrolleable de turnos como `<GlassCard />` estilo chat.
-- [ ] **5.6** 🎨 Componente `<AnnotatedText />` que renderiza spans con fondo/underline rojo / amarillo / azul según severidad.
-- [ ] **5.7** 🎨 Tap en span → tooltip preview con `explanation` + `suggestion` + botón "No era error" (rechazo). Al rechazar: actualizar `weight` y `user_rejections` en `tracked_items`.
-- [ ] **5.8** 🧠 Lógica de auto-archivado por rechazo: si `user_rejections >= 2` y `weight <= 0`, archivar el item automáticamente sin confirmación.
-- [ ] **5.9** 🎨 Trigger: al pulsar "End session" → loader → navegar a `FeedbackScreen` cuando la Edge Function responde.
+- [ ] **5.0** 🧠 *(diferido a Fase 5 v2)* Edge Function `analyze-turn` per-turn: pre-computa anotaciones durante la sesión para reducir latencia al cierre.
+- [ ] **5.0b** 🧠 *(diferido)* LanguageTool: self-host vs cloud free tier. Añade cobertura de edge cases sintácticos. Implementar cuando el loop base funcione.
+- [x] **5.1** 🧠 Edge Function `generate-feedback` (LLM-only, sin LanguageTool): recibe `session_id`, lee turnos, llama LLM con prompt estructurado, devuelve JSON de feedback. Matching de turnos por texto (robusto ante omisiones del LLM).
+- [x] **5.2** 🧠 Validador JSON con **2 reintentos**: retry 1 instrucción de formato; retry 2 prompt mínimo. Si fallan → `feedback_status = 'failed'`.
+- [x] **5.3** 🎨 Estado de error: `Alert.alert` cuando `feedback_status = 'failed'` o falla la invocación. La sesión queda guardada.
+- [x] **5.4** 🗄️ Persistir: `feedback_annotations` (referencia a `turn_id`), upsert `tracked_items` (weight +0.2 si existe, cap 1.0), `sessions.summary` + `sessions.tags` + `feedback_status = 'done'`.
+- [x] **5.5** 🎨 Pantalla `FeedbackScreen`: header (título + tags + contadores 🔴🟡🔵) + body scrolleable de turnos glass-bubble. Reemplaza HorizontalNav (no es modal).
+- [x] **5.6** 🎨 Componente `AnnotatedText` inline en FeedbackScreen: spans con background + underline a color según severidad. Implementado con Text anidados (soporta onPress en RN).
+- [x] **5.7** 🎨 Tap en span → tooltip con explanation + suggestion + botón "Not an error". Al rechazar: weight -1, user_rejections +1, se elimina de la UI local.
+- [x] **5.8** 🧠 Auto-archivado: si `user_rejections >= 2` AND `weight <= 0` → `archived = true` en `tracked_items`.
+- [x] **5.9** 🎨 Trigger real: `handleSessionClosing` en App.tsx captura sessionId → llama `generate-feedback` → si done: `FeedbackScreen` | si failed/corta: `Alert`.
+  > ⚠️ **Pendiente de deploy:** ejecutar `supabase functions deploy generate-feedback` antes de probar.
 - [ ] **5.10** 🧠 Al generar feedback, detectar si el mismo `lemma` aparece en 3+ sesiones previas del usuario. Si sí, incluir en el output JSON un campo `pattern_insights[]`.
 - [ ] **5.11** 🎨 Si `pattern_insights` no vacío, mostrar tarjeta de Pattern Insight en la parte superior del `FeedbackScreen` con botón para abrir deep-dive directo.
 - [ ] **5.12** 🧠 En Edge Function `chat-turn`, detectar fuzzy-match de las expresiones del nudge (`tracked_items` con weight alto) en la respuesta IA. Incluir en respuesta `used_nudge_items[]`.
@@ -286,6 +287,99 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **14.4** 📦 `README.md` completo con setup, variables de entorno, decisiones de arquitectura.
 - [ ] **14.5** 📦 Licencia (MIT o similar) + `CONTRIBUTING.md` mínimo. Preparar para hacer público el repo.
 - [ ] **14.6** ✅ Onboarding cero: clonar el repo en máquina limpia, seguir el README, llegar a app corriendo. Iterar hasta que funcione.
+
+---
+
+## Fase UI.A — Design System Audit (post-iteración Figma 2026-06-21)
+
+> Backlog generado a partir de auditoría senior cruzando código actual (`src/theme/index.ts`, `GlassCard`, `HomeScreen`, `FeedbackScreen`, `HorizontalNav`), [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) y 4 frames canónicos de Figma (nodes 7:2, 53:325, 58:783, 63:1546, 65:1774).
+>
+> **Reglas de orden:** estas tareas NO son una fase secuencial estricta — son hardening transversal. Insertarlas en la fase activa cuando toquen su área (ej. UI.A.G.* al hacer Fase 9.7, UI.A.D.* al revisar contraste antes de Fase 14.2). Marcadas con prefijo `UI.A.` para no romper la numeración existente.
+
+### A · Resync Figma ↔ Spec ↔ Código (decisiones de diseño)
+
+- [x] **UI.A.1** 🎨 ~~Decidir familia tipográfica del **logo "LanguAI"**~~ → **DECISIÓN 2026-06-21**: **Plus Jakarta Sans ExtraLight 200, 36px**. Actualizar Figma (frames 58:817, 65:1788) y confirmar que `DESIGN_SYSTEM.md § 3` + `theme/index.ts` ya usen este valor.
+- [x] **UI.A.2** 🎨 ~~Decidir familia del **streak chip**~~ → **DECISIÓN 2026-06-21**: **Bricolage Grotesque reemplaza a Geist** en el streak chip. No instalar `@expo-google-fonts/geist`. Actualizar Figma (frames 53:355, 65:1820) para eliminar Geist y usar Bricolage Grotesque SemiBold con el gradiente olive→gris existente.
+- [ ] **UI.A.3** 🎨 Decidir si **Bricolage Grotesque ExtraLight 200** entra al sistema (Figma lo usa en scenario card de Roleplay y placeholder de YouTube). Hoy solo Light 300 y Regular 400 están cargados. Si entra: agregar token nuevo (ej. `bodyExtraLight`) + cargar peso 200 en `App.tsx`.
+- [ ] **UI.A.4** 🎨 Actualizar Figma para eliminar el **borde lima `rgba(225,243,125,0.1)`** de las cards de historial (frame 63:1546, vars `fill_12d6ed7e`). DESIGN_SYSTEM § 8 ya lo marca como anti-pattern pero el archivo de Figma no fue resincronizado.
+- [ ] **UI.A.5** 🎨 Actualizar Figma del Home (frame 53:325): hay **3 squircles apilados** (53:332/333/334) replicando el mic con `el efecto`. Viola "nunca el mismo tier apilado" del § 4. Quedarse con 1 squircle + sonar ring.
+- [ ] **UI.A.6** 🎨 Resync **YouTube pill**: Figma frame 65:1837 usa `borderRadius: 32px` + text Bricolage ExtraLight 200 16px; código usa `borderRadius: 20px` + Darker Grotesque 400 13px. Definir cuál es la verdad y alinear.
+- [ ] **UI.A.7** 🎨 **DECISIÓN 2026-06-21**: **Agregar tier `medium`** al sistema de glassmorphism. Valores: `fill: rgba(255,255,255,0.56)`, `stroke: rgba(255,255,255,0.74)`, `blur: 20`. Añadir a `theme/index.ts → glass.medium`, a `GlassCard.tsx` (nuevo `tier="medium"`), y documentar en `DESIGN_SYSTEM.md § 4`.
+- [ ] **UI.A.8** 🎨 Generar **mockups dark mode** en Figma para los 4 frames clave (todos están en light `#FFFFFF` o gris `#DADADA`). Sin mockup dark, "Light mode parity audit" (13.6) no es verificable bidireccionalmente.
+- [ ] **UI.A.9** 🎨 Revisar frame 58:783 (mockup viejo con fill `#DADADA` + texto `#000` puro + Plus Jakarta Sans 14). Verificar si es Login/Onboarding deprecado y eliminarlo o actualizarlo a paleta vigente.
+
+### B · Glassmorphism (consolidación técnica)
+
+- [ ] **UI.A.10** 🎨 Unificar **dos implementaciones de glass**: hoy conviven `GlassCard` (blur 16/27) y `GlassLayers` inline en `HomeScreen` (blur 36/48). Decidir si `GlassLayers` se generaliza como nuevo tier (`mic`/`header`) en `glass = {...}` o si `GlassCard` absorbe los blur intensos.
+- [ ] **UI.A.11** 🎨 Implementar el **"el efecto" liquid glass** de Figma (`boxShadow` con insets blancos + outer 48px) en `GlassCard`. Hoy `GlassCard` solo tiene blur + fill + border plano → pierde la lectura 3D que el Figma propone (frames 53:343, 53:349). Evaluar si es viable con `react-native-shadow-2` o solo con `shadowColor`/`shadowRadius`.
+- [ ] **UI.A.12** 🎨 Hacer `surfaceSoft`/`surfaceStrong` **theme-aware**: hoy ambos modos usan los mismos `rgba(255,255,255,...)`. En dark, glass sobre `#0C0D0B` resulta en superficie casi blanca con texto crema `#F0EDE6` encima → **lectura ilegible** en cards. Definir `dark.surfaceSoft = rgba(255,255,255,0.10)` o similar (verificar contra Figma).
+- [ ] **UI.A.13** 🧠 Auditar **performance de BlurView**: HomeScreen renderiza 6+ `BlurView` simultáneos (header 3 + mic + YT + endBtn + modales). Medir FPS en Android low-end (Pixel 4a o emulador con throttle). Si <55fps, considerar `experimentalBlurMethod="dimezisBlurView"` o reducir blur en dispositivos lentos.
+- [ ] **UI.A.14** 🎨 Documentar **fallback de glass en Android**: `expo-blur` en Android <12 cae a fill sólido. Verificar que `surfaceGhost: 0.02` siga siendo legible sin blur real (probablemente no — necesita aumentar fill cuando se detecta no-blur).
+
+### C · Tipografía (token discipline)
+
+- [ ] **UI.A.15** 🎨 Auditar `HomeScreen.tsx`: hay **hardcoded font sizes** (11, 12, 13, 14, 15, 18) fuera del sistema de 6 tokens (`display 48`, `logo 36`, `nav 24`, `body 20`, `caption 16`, `fine 16`). Migrar a tokens o agregar tokens nuevos justificados en DESIGN_SYSTEM § 3.
+- [ ] **UI.A.16** 🎨 Mismo audit para `FeedbackScreen` (fontSize 10, 11, 12, 13, 15) y `SessionClosingScreen` / `OnboardingScreen`. Generar tabla de "tokens vs hardcoded" como output del audit.
+- [ ] **UI.A.17** 🎨 Aplicar regla **`caption.opacity = 0.75`** consistentemente: hoy el token lo define pero los componentes no lo aplican (queda en 100%). Centralizar en un componente `<Caption />` o en `<ThemedText variant="caption" />`.
+
+### D · Accesibilidad (CRITICAL — bloqueante para v1.0)
+
+- [ ] **UI.A.18** 🎨 Agregar `accessibilityLabel` + `accessibilityRole="button"` a TODOS los `TouchableOpacity` sin texto visible: mic button (Home), header buttons (settings, streak, theme toggle, back), modal close, chips de lang/level, rejection button, "Extraer" YT, back en FeedbackScreen.
+- [ ] **UI.A.19** 🎨 Auditar contraste WCAG 4.5:1 en todos los pares:
+  - `text #F0EDE6` sobre `background #0C0D0B` (esperado: ✅)
+  - `text` sobre `surfaceSoft` (sospecha: ❌)
+  - `textMuted` sobre `background` (sospecha: ✅ pero borderline)
+  - `caption opacity 0.75 × textMuted 0.5 = 0.375 efectivo` (sospecha: ❌)
+  - `danger` y `accent` sobre `background`
+  Generar reporte con APCA o WCAG-AA y ajustar tokens.
+- [ ] **UI.A.20** 🎨 Implementar soporte de **`AccessibilityInfo.isReduceMotionEnabled()`**: sonar ring (HomeScreen), breath loop (mic scale), mount fades, ElasticSVG membranes, FadeInUp/FadeOutDown del End button → todos deben pausarse o reducirse cuando el sistema lo pide.
+- [ ] **UI.A.21** 🎨 Reemplazar emojis severidad `🔴🟡🔵` por **íconos SVG semánticos** + label de texto en `FeedbackScreen` counters y badges. Mantener color como refuerzo, no como único indicador (regla `color-not-only`).
+- [ ] **UI.A.22** 🎨 Implementar **focus trap + escape route** en modales (Discard, Lang picker, Annotation tooltip): cerrar con Esc en web, con back-button hardware en Android, con swipe-down en iOS. Hoy solo cierran tapeando overlay.
+- [ ] **UI.A.23** 🎨 Soportar **Dynamic Type / Text Scale**: el sistema tipográfico tiene `fontSize` fijos. Cuando el usuario aumenta tamaño de fuente del SO, hay riesgo de truncado en headers y chips. Probar con escala iOS 200% y Android 1.3x; agregar `allowFontScaling` policy explícita por token.
+
+### E · Web compatibility (decisión estratégica)
+
+- [x] **UI.A.24** 📦 ~~Decidir alcance web~~ → **DECISIÓN 2026-06-21**: **Solo app móvil nativa**. No se soporta `react-native-web` ni PWA. Bloque UI.A.25–UI.A.32 queda archivado. Documentar en `CLAUDE.md` como decisión no negociable para evitar regresiones futuras.
+- [~] **UI.A.25** ~~📦 (web) Configurar `react-native-web`~~ → **ARCHIVADA** (decisión UI.A.24: solo mobile).
+- [~] **UI.A.26** ~~🎨 (web) Breakpoints responsive~~ → **ARCHIVADA**.
+- [~] **UI.A.27** ~~🎨 (web) Hover states~~ → **ARCHIVADA**.
+- [~] **UI.A.28** ~~🎨 (web) Keyboard navigation~~ → **ARCHIVADA**.
+- [~] **UI.A.29** ~~🎨 (web) BlurView fallback Firefox/Safari~~ → **ARCHIVADA**.
+- [~] **UI.A.30** ~~🎨 (web) Viewport meta~~ → **ARCHIVADA**.
+- [~] **UI.A.31** ~~🎨 (web) Conflicto swipe HorizontalNav~~ → **ARCHIVADA**.
+- [~] **UI.A.32** ~~🎨 (web) SafeAreaView en web~~ → **ARCHIVADA**.
+
+### F · Touch targets & inputs
+
+- [ ] **UI.A.33** 🎨 Auditar todos los hit targets <44pt y expandir con `hitSlop` o padding:
+  - YouTube "Extraer" button (paddingVertical 6 → ~28pt total). Subir a 12.
+  - Modal chips (paddingVertical 9 → ~36pt). Subir a 13 o aumentar fontSize.
+  - Severity badges en feedback tooltip.
+- [ ] **UI.A.34** 🎨 Validación inline en YouTube `TextInput`: detectar URL inválida y mostrar microcopy bajo el input (regla `inline-validation` + `error-clarity`). Hoy un URL malformado no avisa.
+- [ ] **UI.A.35** 🎨 Modal Discard: usar `animationType="slide"` + drag handle visible (3px × 36px gray bar centrada arriba del sheet) para coherencia con expectativa nativa iOS. Hoy es `"fade"` y sin handle.
+
+### G · Loading & empty states
+
+- [ ] **UI.A.36** 🎨 Reemplazar `ActivityIndicator` en `FeedbackScreen` (loading >1s) por **skeleton screen** (3 burbujas grises shimmer + header skeleton).
+- [ ] **UI.A.37** 🎨 Mismo skeleton pattern para `SessionClosingScreen` — el spinner solo es válido <300ms.
+- [ ] **UI.A.38** 🎨 Agregar **empty state HomeScreen first-time user**: hint "Tap the mic to start your first conversation" + arrow apuntando al mic. Esconderse después de la primera sesión.
+- [ ] **UI.A.39** 🎨 Empty state planificado para `VocabularyHubScreen` (Fase 9.7.11) y `HistoryScreen` (Fase 8.1) — diseñar antes de implementar, no después.
+
+### H · Icon consistency
+
+- [ ] **UI.A.40** 🎨 Unificar **fill vs outline** en iconos del mic: hoy `mic` y `stop` son filled, `hourglass-outline` y `radio-outline` son outline. Decidir un estilo único (probablemente outline para coherencia con header `arrow-back`, `settings-outline`, `moon-outline`).
+- [ ] **UI.A.41** 🎨 Documentar **icon set canónico** en DESIGN_SYSTEM.md (§ nueva): Ionicons outline + stroke width 1.5 + sizes 18/22/24 + alignment baseline. Hoy no hay regla escrita.
+
+### I · Performance & rendering
+
+- [ ] **UI.A.42** 🧠 Auditar **mount cost de HorizontalNav**: las 3 pantallas (Roleplay, Home, SRS) montan side-by-side. Sonar loop + breath loop + blob animation corren en pantallas offscreen → CPU/GPU desperdiciado. Pausar animaciones cuando `currentPage !== index`.
+- [ ] **UI.A.43** 🧠 `FeedbackScreen` usa `ScrollView` para turnos. Sesiones >40 turnos producirán memory pressure. Migrar a `FlatList` con `removeClippedSubviews` antes de Fase 13.
+- [ ] **UI.A.44** 🧠 Auditar **re-render del Home** en cada cambio de `voiceStatus`: el componente raíz se re-renderiza completo (incluye todos los hijos). Memoizar `GlassLayers`, `HeaderBtnBorder` con `React.memo`.
+
+### J · Documentación cruzada
+
+- [ ] **UI.A.45** 📦 Crear `crafting/UI_AUDIT_2026-06.md` con: tabla "Figma node ↔ código path ↔ spec sección", lista de divergencias, snapshot de tokens vigentes vs aplicados. Sirve como baseline para futuras auditorías y referencia para Gemini al generar nuevas pantallas.
+- [ ] **UI.A.46** 📦 Actualizar `DESIGN_SYSTEM.md § 8` (tabla de anti-patterns) con los hallazgos nuevos: dos implementaciones de glass, hardcoded font sizes, mix fill/outline icons, emoji severidad load-bearing, `surfaceSoft` no theme-aware.
 
 ---
 
