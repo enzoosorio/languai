@@ -15,6 +15,7 @@
  */
 import React, {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   Children,
 } from 'react';
@@ -26,6 +27,7 @@ import Animated, {
   useDerivedValue,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../hooks/useTheme';
@@ -40,6 +42,13 @@ interface HorizontalNavProps {
   children: React.ReactNode;
   /** Página inicial (0-based). Default: 1 (Home) */
   initialPage?: number;
+  /**
+   * Nivel de focus del Home:
+   *   0 = normal  — swipe habilitado, membranas visibles
+   *   1 = parcial — swipe bloqueado, membranas al 30%
+   *   2 = completo — swipe bloqueado, membranas ocultas
+   */
+  focusLevel?: 0 | 1 | 2;
 }
 
 // ── Constantes ─────────────────────────────────────────────────────────────────
@@ -55,7 +64,7 @@ function hapticMedium() { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium
 
 // ── Componente ─────────────────────────────────────────────────────────────────
 export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
-  function HorizontalNav({ children, initialPage = 1 }, ref) {
+  function HorizontalNav({ children, initialPage = 1, focusLevel = 0 }, ref) {
     const { width, height } = useWindowDimensions();
     const { isDark } = useTheme();
 
@@ -77,8 +86,17 @@ export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
     const leftPullX  = useDerivedValue(() => Math.max(0,  translationX.get()));
     const rightPullX = useDerivedValue(() => Math.max(0, -translationX.get()));
 
+    // ── Opacidad de membranas según focus mode ─────────────────────────────
+    const edgeOpacity = useSharedValue(1);
+    useEffect(() => {
+      const target = focusLevel === 2 ? 0 : focusLevel === 1 ? 0.3 : 1;
+      edgeOpacity.set(withTiming(target, { duration: 250 }));
+    }, [focusLevel]);
+    const edgeContainerStyle = useAnimatedStyle(() => ({ opacity: edgeOpacity.get() }));
+
     // ── Gesto pan ──────────────────────────────────────────────────────────────
     const gesture = Gesture.Pan()
+      .enabled(focusLevel === 0)   // bloqueado en focus parcial y completo
       .activeOffsetX([-ACTIVE_OFFSET_X, ACTIVE_OFFSET_X])
       .onBegin((e) => {
         'worklet';
@@ -166,11 +184,11 @@ export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
             {pages.map((child, i) => (
               <View key={i} style={{ width, height: '100%' }}>
                 {child}
-                {/* Membranas elásticas — dentro de cada página, se mueven con ella */}
-                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                {/* Membranas elásticas — fade según focus mode */}
+                <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, edgeContainerStyle]}>
                   <ElasticSVG side="left"  pullX={leftPullX}  touchY={touchY} isDark={isDark} />
                   <ElasticSVG side="right" pullX={rightPullX} touchY={touchY} isDark={isDark} />
-                </View>
+                </Animated.View>
               </View>
             ))}
           </Animated.View>

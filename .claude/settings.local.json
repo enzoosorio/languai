@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(ls \"C:\\\\Users\\\\enzoo\\\\.claude\\\\plugins\\\\claude-plugins-official\")",
-      "Bash(node -e \"const pkg = require\\('./package.json'\\); const deps = {...pkg.dependencies, ...pkg.devDependencies}; const relevant = ['react-native-reanimated','react-native-gesture-handler','react-native-svg','@shopify/react-native-skia','expo-blur','expo-haptics']; relevant.forEach\\(k => console.log\\(k + ': ' + \\(deps[k] || 'NOT INSTALLED'\\)\\)\\);\")"
+      "Bash(node -e \"const pkg = require\\('./package.json'\\); const deps = {...pkg.dependencies, ...pkg.devDependencies}; const relevant = ['react-native-reanimated','react-native-gesture-handler','react-native-svg','@shopify/react-native-skia','expo-blur','expo-haptics']; relevant.forEach\\(k => console.log\\(k + ': ' + \\(deps[k] || 'NOT INSTALLED'\\)\\)\\);\")",
+      "mcp__figma-developer-mcp__get_figma_data",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(npx eslint *)"
     ]
   }
 }
