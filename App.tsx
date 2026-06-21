@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { StyleSheet, StatusBar, ActivityIndicator } from 'react-native';
+import React, { useRef, useEffect, useState } from 'react';
+import { StyleSheet, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import {
@@ -31,9 +31,14 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { RoleplayScreen } from './src/screens/RoleplayScreen';
 import { SRSScreen } from './src/screens/SRSScreen';
+import { SessionClosingScreen } from './src/screens/SessionClosingScreen';
+import { FeedbackScreen } from './src/screens/FeedbackScreen';
 
 // Onboarding placeholder hasta que se construya Chunk B
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
+
+// Zustand store (para endSession en handleSessionClosing)
+import { useSessionStore } from './src/stores/useSessionStore';
 
 // ── Contenido interno de la app ────────────────────────────────────────────────
 // Separado de App para que SafeAreaProvider sea el raíz absoluto.
@@ -43,6 +48,62 @@ function AppContent() {
   const navRef = useRef<HorizontalNavRef>(null);
   const { isDark, colors } = useTheme();
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
+
+  // Focus level del Home — controla el lock de swipe y la opacidad de las membranas
+  const [focusLevel, setFocusLevel] = useState<0 | 1 | 2>(0);
+
+  // SessionClosingScreen — overlay spinner mientras se genera el feedback
+  const [isClosing, setIsClosing] = useState(false);
+  // FeedbackScreen — reemplaza HorizontalNav cuando el feedback está listo
+  const [feedbackSessionId, setFeedbackSessionId] = useState<string | null>(null);
+  // ¿El feedback falló? (5.3 — error UI básico)
+  const [feedbackFailed, setFeedbackFailed] = useState(false);
+
+  /**
+   * Llamado por HomeScreen cuando la sesión termina normalmente.
+   * Flujo: capturar session_id → endSession() → spinner → generate-feedback →
+   *        si done: FeedbackScreen | si failed o muy corta: volver al Home.
+   */
+  const handleSessionClosing = async () => {
+    // Capturar ANTES de que endSession() limpie el store
+    const sessionId  = useSessionStore.getState().sessionId;
+    const turnIndex  = useSessionStore.getState().turnIndex;
+
+    await useSessionStore.getState().endSession();
+
+    // Menos de 6 turnos (3 intercambios) → demasiado corto para feedback
+    if (!sessionId || turnIndex < 6) return;
+
+    setIsClosing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-feedback', {
+        body: { session_id: sessionId },
+      });
+
+      setIsClosing(false);
+
+      if (error || !data || data.feedback_status === 'failed') {
+        // 5.3 — mostrar aviso y volver al home
+        setFeedbackFailed(true);
+        return;
+      }
+
+      setFeedbackSessionId(sessionId);
+    } catch (err) {
+      console.warn('[App] generate-feedback error:', err);
+      setIsClosing(false);
+    }
+  };
+
+  // 5.3 — Mostrar alert cuando el feedback falla
+  useEffect(() => {
+    if (!feedbackFailed) return;
+    Alert.alert(
+      'Feedback not available',
+      "We couldn't generate your session feedback. Your conversation was saved.",
+      [{ text: 'OK', onPress: () => setFeedbackFailed(false) }],
+    );
+  }, [feedbackFailed]);
 
   const { user, settings, isLoading, setUser, setLoading, clearUser, loadSettings } =
     useUserStore();
@@ -115,6 +176,21 @@ function AppContent() {
         <OnboardingScreen />
       </>
     );
+  } else if (feedbackSessionId) {
+    // ── Feedback screen — reemplaza toda la UI de navegación ──────────────
+    inner = (
+      <>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <BackgroundBlob />
+        <FeedbackScreen
+          sessionId={feedbackSessionId}
+          onClose={() => {
+            setFeedbackSessionId(null);
+            setFocusLevel(0);
+          }}
+        />
+      </>
+    );
   } else {
     inner = (
       <>
@@ -122,12 +198,14 @@ function AppContent() {
         <BackgroundBlob />
 
         {/* HorizontalNav — 3 páginas [Roleplay | Home | SRS], arranca en Home (1) */}
-        <HorizontalNav ref={navRef} initialPage={1}>
+        <HorizontalNav ref={navRef} initialPage={1} focusLevel={focusLevel}>
           <RoleplayScreen onNavigateHome={() => goToPage(1)} />
           <HomeScreen
             onNavigateRoleplay={() => goToPage(0)}
             onNavigateSRS={() => goToPage(2)}
             onToggleTheme={toggleTheme}
+            onFocusChange={setFocusLevel}
+            onSessionClosing={handleSessionClosing}
           />
           <SRSScreen onNavigateHome={() => goToPage(1)} />
         </HorizontalNav>
@@ -139,6 +217,12 @@ function AppContent() {
     <GestureHandlerRootView style={styles.rootView}>
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         {inner}
+
+        {/* SessionClosingScreen — overlay full-screen, se monta sobre todo */}
+        <SessionClosingScreen
+          visible={isClosing}
+          onClose={() => setIsClosing(false)}
+        />
       </SafeAreaView>
     </GestureHandlerRootView>
   );

@@ -5,24 +5,33 @@ import { useUserStore } from './useUserStore';
 type SessionMode = 'free' | 'roleplay' | 'deep_dive';
 
 interface SessionState {
-  sessionId: string | null;
-  turnIndex: number;
-  language: string;
-  level: string;
-  mode: SessionMode;
-  isActive: boolean;
-  startSession: (lang: string, level: string, mode?: SessionMode) => Promise<void>;
-  persistTurn: (speaker: 'user' | 'ai', text: string) => void;
-  endSession: () => Promise<void>;
+  sessionId:    string | null;
+  turnIndex:    number;
+  language:     string;
+  level:        string;
+  mode:         SessionMode;
+  isActive:     boolean;
+  /** La IA llamó end_conversation con confidence ≥ 0.85 */
+  endRequested: boolean;
+  /** La IA llamó end_conversation con confidence 0.50–0.84 (soft close) */
+  pendingClose: boolean;
+
+  startSession:    (lang: string, level: string, mode?: SessionMode) => Promise<void>;
+  persistTurn:     (speaker: 'user' | 'ai', text: string) => void;
+  endSession:      () => Promise<void>;
+  setEndRequested: (val: boolean) => void;
+  setPendingClose: (val: boolean) => void;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
-  sessionId: null,
-  turnIndex: 0,
-  language: '',
-  level: '',
-  mode: 'free',
-  isActive: false,
+  sessionId:    null,
+  turnIndex:    0,
+  language:     '',
+  level:        '',
+  mode:         'free',
+  isActive:     false,
+  endRequested: false,
+  pendingClose: false,
 
   startSession: async (lang, level, mode = 'free') => {
     const user = useUserStore.getState().user;
@@ -74,6 +83,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     if (error) console.warn('endSession error:', error.message);
 
-    set({ sessionId: null, isActive: false, turnIndex: 0 });
+    set({
+      sessionId:    null,
+      isActive:     false,
+      turnIndex:    0,
+      endRequested: false,
+      pendingClose: false,
+    });
   },
+
+  setEndRequested: (val) => set({ endRequested: val }),
+  setPendingClose: (val) => set({ pendingClose: val }),
 }));
