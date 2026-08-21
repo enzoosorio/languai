@@ -42,6 +42,8 @@ Este archivo es el contexto de trabajo exclusivo para Claude (Sonnet 4.x). Defin
 
 | Archivo | Contenido |
 |---|---|
+| `crafting/00-DECISIONS.md` | Decisiones (D1…) con su porqué y alternativas, Gaps (G1…) y Preguntas abiertas (Q1…) — fuente de verdad de criterio |
+| `MINI_TASKS.md` | Plan ejecutable contable (1…38): qué está sobre la mesa ahora, con bloqueos explícitos |
 | `crafting/ARCHITECTURE.md` | Stack, schema DB completo (DDL), Edge Functions, latencias, deuda multi-idioma |
 | `crafting/TASKS.md` | Roadmap de ~130 tareas en 17 fases — fuente de verdad de ejecución |
 | `crafting/PRODUCT.md` | Visión, features core y secundarias |
