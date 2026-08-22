@@ -97,7 +97,7 @@ Los identificadores canónicos viven en tablas markdown y en ningún otro sitio 
 
 **Regla dura:** en cualquier otro archivo (specs, código, assets SVG, etc.) los tokens `D<n>`, `Q<n>`, `G<n>` y `M<n>` deben ser solo referencias a items canónicos. Nunca deben aparecer como literales en ejemplos técnicos, porque el parser del repo los confunde con items reales.
 
-Ejemplo concreto: un path SVG como `Q80,300 0,600` fue detectado como una pregunta abierta `Q80`. La forma de evitarlo es usar variables o placeholders en vez de literales numéricos tras comandos SVG (`Q`, `M`, etc.):
+Ejemplo concreto: un path SVG como `Q <numero>,<coordenadas>` (p. ej., quadratic Bezier) fue detectado como una pregunta abierta porque el parser ve `Q` seguido de dígitos. La forma de evitarlo es usar variables o placeholders en vez de literales numéricos tras comandos SVG (`Q`, `M`, etc.):
 
 ```svg
 M 0,0
