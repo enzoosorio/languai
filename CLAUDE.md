@@ -84,6 +84,36 @@ Este archivo es el contexto de trabajo exclusivo para Claude (Sonnet 4.x). Defin
 
 ---
 
+## Convención de identificadores de repo
+
+Los identificadores canónicos viven en tablas markdown y en ningún otro sitio como texto suelto:
+
+| Tipo | Archivo | Formato |
+|---|---|---|
+| Decisiones | `crafting/00-DECISIONS.md` | `D<n>` |
+| Preguntas abiertas | `crafting/00-DECISIONS.md` | `Q<n>` |
+| Gaps | `crafting/00-DECISIONS.md` | `G<n>` |
+| Mini-tareas | `crafting/MINI_TASKS.md` | `<n>` (sin prefijo) |
+
+**Regla dura:** en cualquier otro archivo (specs, código, assets SVG, etc.) los tokens `D<n>`, `Q<n>`, `G<n>` y `M<n>` deben ser solo referencias a items canónicos. Nunca deben aparecer como literales en ejemplos técnicos, porque el parser del repo los confunde con items reales.
+
+Ejemplo concreto: un path SVG como `Q80,300 0,600` fue detectado como una pregunta abierta `Q80`. La forma de evitarlo es usar variables o placeholders en vez de literales numéricos tras comandos SVG (`Q`, `M`, etc.):
+
+```svg
+M 0,0
+Q ${pullX},300 0,600
+```
+
+Validador local:
+
+```powershell
+.\scripts\validate_repo_ids.ps1
+```
+
+Debe devolver `OK` antes de considerar un spec o componente terminado.
+
+---
+
 ## Checklist de supervisión (usar en cada revisión)
 
 Cuando Gemini entregue código, verificar:
@@ -94,6 +124,7 @@ Cuando Gemini entregue código, verificar:
 - [ ] ¿Las Edge Functions usan `Deno.serve()` (no el import antiguo de std@0.168.0)?
 - [ ] ¿Los servicios del front llaman a Supabase con el cliente de `src/lib/supabase.ts`?
 - [ ] ¿Se respeta la estructura de carpetas `src/{screens,components,stores,services,hooks,lib,types,theme}`?
+- [ ] ¿No introduce identificadores `D<n>`, `Q<n>`, `G<n>` o `M<n>` sueltos fuera de las tablas canónicas? (correr `scripts\validate_repo_ids.ps1`)
 
 ### Para UI/UX
 - [ ] ¿Usa NativeWind (clases Tailwind) en vez de StyleSheet.create?

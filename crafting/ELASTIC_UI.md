@@ -210,10 +210,12 @@ Bézier curves
 
 Ejemplo conceptual:
 
-M0,0
-Q80,300 0,600
+```svg
+M 0,0
+Q ${pullX},300 0,600
+```
 
-Ese 80 cambia dinámicamente según el drag.
+Ese `${pullX}` cambia dinámicamente según el drag.
 
 Entonces el borde literalmente se deforma.
 
