@@ -170,7 +170,8 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 - [x] **5.A.1** 🧠 Reescribir `generate-feedback` con modelo unificado: el LLM copia el substring del error **verbatim**; el span se calcula en código con `indexOf` (determinístico). Cada anotación con `track:true` hace upsert del `tracked_item` y vincula `tracked_item_id`. → arregla A1, A2, B1–B4, C1–C4, F2.
 - [x] **5.A.2** 🎨 **TITULO-FEEDBACK-TRUNCATION**: el título del header se trunca con `…`; tap → píldora expandida en z-index con el título completo; tap fuera → cierra.
-- [ ] **5.A.3** ✅ Re-desplegar `generate-feedback` y verificar en **sesión nueva**: spans de 3 colores visibles, tooltip abre/cierra, "Not an error" archiva y baja weight, `feedback_annotations` poblada con `tracked_item_id`.
+- [x] **5.A.3** 🎨 `SeverityDot` SVG (gradiente radial) reemplaza los emojis 🔴🟡🔵 en contadores y badge del tooltip — tono/forma consistentes iOS↔Android.
+- [x] **5.A.4** ✅ Verificado en sesión nueva: A1/A2/A3 (3 colores) ✓, B1/B2/B3/B4 (tooltip + "Not an error" solo en tracked) ✓. **Pendiente:** C1–C4 (rechazo → weight/user_rejections/archived en DB).
 
 ### Fase 5.B — PARTIAL-SUMMARY-STREAMING (EDA / Realtime)
 
@@ -212,15 +213,73 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 9 — SRS de Phrasal Verbs / Tracked Items (EN-only)
 
-- [ ] **9.1** 🧠 Implementar algoritmo SM-2 (Anki simplificado) en `src/lib/srs.ts`. Función `nextReview(item, grade) → newSrsState`.
-- [ ] **9.2** 🗄️ Al persistir un `tracked_item` (Fase 5.4), inicializar `srs_state` con intervalo 1 día, ease 2.5.
-- [ ] **9.3** 🎨 Pantalla `SRSScreen` (swipe derecho desde Home + botón fallback): tab/toggle para SRS Phrasal Verbs y Shadow Reading. Mostrar solo `language='en'` para SRS.
-- [ ] **9.4** 🎨 Card SRS: muestra `text` + `explanation`, botón "Reveal", luego 4 botones (Again / Hard / Good / Easy) que llaman `nextReview`. Badge "✓ usado en sesión" si el item fue activado via nudge.
+- [x] **9.1** 🧠 Implementar algoritmo SM-2 (Anki simplificado) en `src/lib/srs.ts`. Función `nextReview(state, grade, now?) → SrsState` (pura, determinística). Mapeo Again/Hard/Good/Easy → quality 2/3/4/5; ease floor 1.3; Hard ×1.2, Easy ×1.3 bonus. Helpers `addDays`, `isDue`, `DEFAULT_SRS_STATE`. Validado: good×4 → 1/6/15/38d.
+- [x] **9.2** 🗄️ `srs_state` se inicializa via el DEFAULT de la migración 002 (`{interval:1, ease:2.5, repetitions:0, next_review:null}`) — el insert de `generate-feedback` no lo setea, y el update de items existentes no lo pisa (preserva progreso). Verificado en DB.
+- [x] **9.3** 🎨 Pantalla `SRSScreen`: header + tab toggle [Phrasal Verbs | Shadow Reading]; Shadow = placeholder (Fase 9.5). Loading + empty state ("all caught up") + session complete. Fetch de items no archivados + filtro `isDue` en cliente.
+  > ⚠️ **Deuda:** `tracked_items` no tiene columna `language`. MVP EN-only → se traen todos. Si se necesita filtrado estricto EN/DE: migración que agregue `language` a `tracked_items` + setearla en `generate-feedback` desde `session.language`.
+- [x] **9.4** 🎨 Card SRS: front "You said" (`text`) → Reveal → "Natural form" (`lemma`) + `explanation`; 4 botones Again/Hard/Good/Easy → `nextReview` → persiste `srs_state` + haptics + transición animada. Badge "✓ usado en sesión" **diferido a 9.8** (nudge aún no existe).
 - [ ] **9.5** 🧠 Lógica de graduación (Opción C): al calcular `nextReview`, verificar si `weight <= 0` AND `srs_state.interval >= 14`. Si sí, setear una flag `graduation_suggested = true` en el item. En la siguiente apertura del SRS, mostrar la sugerencia de archivar antes de la card.
 - [ ] **9.6** 🎨 Modal de graduación: *"Parece que ya dominas '[expresión]' — ¿archivarlo?"* con botones [Archivar] / [Seguir practicando]. Al archivar: `archived = true`, item pasa a sección "Graduados" consultable.
 - [ ] **9.7** 🧠 Modo "drill": Edge Function `generate-srs-drill` que toma N items y genera 3-5 mini-ejercicios de uso (cloze + producción libre).
 - [ ] **9.8** 🧠 **Nudge implícito**: helper `buildSystemPrompt(user_id, lang)` que inyecta top N tracked_items con weight alto como instrucción al LLM ("weave these naturally, do not mention"). Usar en Edge Function `chat-turn`.
 - [ ] **9.9** ✅ Cometer error → aparece como card SRS → repasar → en sesión siguiente la IA usa la expresión → badge ✓ en SRS → alcanzar criterio de graduación → ver sugerencia de archivado.
+
+### Fase 9.A — SRS UX polish (iteración de diseño, 2026-06-22)
+
+> Feedback de uso real sobre el SRS: texto ilegible (contraste), card sin liquid glass, botones de grado rotos (rojo-sobre-rojo + off-palette), sin onboarding del modo. Decisiones: TTS al revelar + glass con tinte sutil + estrategia de versionado estándar RN/Expo.
+
+- [x] **9.A.1** 🎨 Liquid glass real en la card (tier `frost` sobre el mesh blob) + `ScrollView` interno (arregla overflow de la `explanation`) + contraste de texto (`textSoft` ≥3:1 para secundarios).
+- [x] **9.A.2** 🎨 Botones de grado al palette de marca (Again=terracota, Hard=ámbar, Good=olivo, Easy=sage) con glass + tinte sutil + **texto crema legible** + dot de color + sub-label (Forgot / 1–2 days / On track / Knew it) + prompt "How well did you recall it?".
+- [x] **9.A.3** 🎨 Intro/Start screen (deck overview + "Start review") + botón ayuda (?) con **modal de guía** (Recall → Reveal → Rate). Resuelve "no sé qué hacer / no hay botón de comenzar".
+- [x] **9.A.4** 🧠 Botón 🔊 TTS al revelar: reproduce la `lemma` (forma natural) vía `speak()` + `expo-av`. (Decisión: SRS sigue siendo flashcards; la IA conversacional vive en Home, el listen&repeat en Shadow Reading 9.5.)
+
+### Fase 9.B — Flashback de contexto + Tracking de mini-sesiones + TTS cache (2026-06-25)
+
+> Tres mejoras que enriquecen el SRS antes de la graduación. Plan completo en el plan file de la sesión.
+> **Pendiente de deploy:** aplicar `006_srs_tracking.sql` en Supabase + regenerar tipos (`supabase gen types`).
+
+- [x] **9.B.1** 🗄️ Migración `006_srs_tracking.sql`: `srs_sessions` (agrupador liviano: id, user_id, started/ended) + `srs_reviews` (log por card: grade, used_tts, used_history, srs_state antes/después) + RLS (patrón 004) + vista `srs_session_stats` (agregados derivados, `security_invoker`).
+- [x] **9.B.2** 🧠 `src/services/srsSession.ts` (`startSrsSession` / `recordReview` / `endSrsSession`) + wiring en SRSScreen (Start abre sesión; cada grade loguea review con flags; back/tab/unmount/finish cierran).
+- [x] **9.B.3** 🎨🧠 Flashback: `src/services/srsContext.ts` (resolución annotation→turno + fallback indexOf, `fetchTurnWindow`, `baseWindow`) + modal con síntesis + ventana de 6 turnos (turno objetivo resaltado + span) + load-more ↑/↓ paginado + stepper de batch + "Load full" (≤60).
+- [x] **9.B.4** 🧠 `speakCached()` + cache persistente por lemma (hash djb2 en `cacheDirectory/tts_cache`) en `tts.ts`.
+- [x] **9.B.5** 🎨 Prefetch look-ahead (card actual + siguientes 2) + flags `usedTts`/`usedHistory` por card.
+- [ ] **9.B.6** ✅ E2E: flashback (item nuevo + legacy + conv larga con paginación), tracking (filas en `srs_sessions`/`srs_reviews`), TTS cache hit (~0 latencia).
+
+### Fase 9.C — SRS focus mode + bugfixes (2026-06-25)
+
+> Lote de bugs/UX tras testear 9.B en device. Plan completo en el plan file.
+
+- [x] **9.C.1** 🎨🧠 **Modo enfoque reusable**: `src/stores/useFocusStore.ts` (zustand, `acquire/release` por owner) + `src/components/EdgeFocusOverlay.tsx` (vignette SVG con gradiente, opacidad animada). `HorizontalNav` bloquea swipe (`!swipeLocked`); Home adquiere/libera según `focusLevel`; SRS adquiere en Start, libera en finish/back/End/unmount.
+- [x] **9.C.2** 🎨 Botón **"End session"** explícito en la vista de cards → `finishSrsSession` + `fetchQueue` + libera foco.
+- [x] **9.C.3** 🧠 **Fix audio mudo**: `Audio.setAudioModeAsync({ playsInSilentModeIOS: true })` antes de reproducir en SRS (Home lo seteaba al grabar; SRS nunca graba) + logs en `handleSpeak` y `tts.speakCached`.
+- [x] **9.C.4** 🎨 **Fix layout de modales** (causa: `GlassCard content flex:1` colapsa): guía con `noPadding` + View interno con padding (aparece al instante); flashback con `ScrollView maxHeight` → scroll vertical real + stepper visible.
+- [x] **9.C.5** 🎨 **Contraste del span**: burbuja objetivo neutra + borde accent; span con relleno sólido accent + texto crema bold (salta a la vista).
+- [x] **9.C.6** 🧠 **Filtro de basura** en `generate-feedback` (descarta spans <2 chars / letras sueltas, ej. "U") + refuerzo del prompt + filtro client-side en `fetchQueue`.
+- [x] **9.C.7** 🎨 **Cap del mazo = 15** cards/sesión (`DECK_CAP`); resuelve "nunca las acabo" + card fantasma.
+- [x] **9.C.8** 🧠 **Cache de flashback** por sesión (`Map` ref, se limpia al cerrar) → reabrir el mismo item no re-consulta la DB.
+- [ ] **9.C.9** ✅ E2E: swipe bloqueado + vignette en SRS y conversación; audio suena en silencio; modales OK; span legible; sin basura/fantasma; cache de flashback sin re-query.
+  > ⚠️ **Re-deploy** `generate-feedback` tras el filtro de basura.
+
+### Fase 9.D — Pulido de enfoque + UX de card (2026-06-25)
+
+> Segunda ronda de feedback de device sobre 9.C.
+
+- [x] **9.D.1** 🎨 Reestructurar modales (guía + flashback) con **backdrop `Pressable` separado** (no envolver el card en `TouchableOpacity`) → el `ScrollView` del historial **scrollea vertical** + sin leak del gesto de swipe.
+- [x] **9.D.2** 🎨 Back button **deshabilitado y atenuado** (opacity 0.3) durante el enfoque → no se puede salir libremente; la salida es el botón End session.
+- [x] **9.D.3** 🎨 Botón **"End session"** con label completo (antes mostraba solo "End" + label oculto en accessibility).
+- [x] **9.D.4** 🎨 **Scale 0.92** de la vista SRS en modo enfoque (centrada) → el vignette de bordes no choca con card/tabs/botones. Solo en SRS (Home no lo necesita).
+- [x] **9.D.5** 🎨 **Rediseño de card**: muestra de entrada la forma errónea (de-enfatizada, tachada) + **forma natural protagonista** + audio + explicación. El botón "Rate this card" solo revela los 4 grados (ya no oculta la respuesta). Copy de intro/guía actualizado.
+
+## Fase 14.5 — Hardening de dependencias y reproducibilidad de build
+
+> **Contexto:** preocupación por roturas al actualizar RN/Expo/librerías. Docker NO resuelve esto (las apps RN compilan a binario nativo, no corren en contenedor; Expo fija versiones por SDK). Estrategia estándar RN/Expo:
+
+- [ ] **14.5.1** 📦 Pin del Expo SDK + `package-lock.json` commiteado (lockfile como fuente de verdad de versiones). Documentar la versión exacta de SDK soportada en el README.
+- [ ] **14.5.2** 📦 `expo-doctor` en CI (GitHub Action) que falla el build si hay versiones incompatibles con el SDK activo.
+- [ ] **14.5.3** 📦 EAS Build con perfiles fijados (`eas.json`) para builds reproducibles (mismo toolchain nativo en cada build).
+- [ ] **14.5.4** 📦 Renovate/Dependabot con auto-merge solo de patches + PRs agrupadas para minors/majors → updates controlados y revisables, nunca masivos.
+- [ ] **14.5.5** 🧠 *(opcional)* Snapshot "known-good": tag de git + lockfile congelado antes de cada upgrade de SDK, para rollback inmediato si algo se rompe.
+  > Docker queda fuera de scope para libs nativas; si en el futuro se quiere reproducir el entorno de **CI** (node + tooling), un Dockerfile de CI es válido pero es ortogonal a este blindaje.
 
 ## Fase 9.5 — Shadow Reading Mode
 
@@ -306,6 +365,21 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **14.5** 📦 Licencia (MIT o similar) + `CONTRIBUTING.md` mínimo. Preparar para hacer público el repo.
 - [ ] **14.6** ✅ Onboarding cero: clonar el repo en máquina limpia, seguir el README, llegar a app corriendo. Iterar hasta que funcione.
 
+## Fase 15 — Knowledge Vault (baúl de conocimiento)
+
+> Feature futura (las últimas a implementar). Spec completa en [KNOWLEDGE_VAULT.md](KNOWLEDGE_VAULT.md).
+> La app como base de conocimiento personal: conversaciones persistentes, reanudables por voz, organizadas
+> por tags. **El schema ya lo soporta** (`sessions.tags[]` + `summary` + `session_turns`) → no requiere
+> tablas nuevas, es UI + ajustes de lógica. El flashback SRS (Fase 9.B) es el primer paso concreto.
+
+- [ ] **15.1** 🧠 Fix `chat-turn`: traer los **últimos N** turnos (hoy trae los primeros con `order asc + limit`). Imprescindible para reanudar conversaciones largas con contexto reciente.
+- [ ] **15.2** 🎨 Pantalla `VaultScreen`: carpetas = `sessions.tags[]` → lista de conversaciones por tag. UI estilo chat de IA (carpetas → conversaciones).
+- [ ] **15.3** 🧠🎨 Reabrir y **continuar una conversación por voz**: setear la sesión activa en `useSessionStore`, continuar insertando turnos desde el último `idx`, IA rehidratada.
+- [ ] **15.4** 🧠 Summary evolutivo: al reabrir y agregar turnos, re-generar/extender `sessions.summary` (reusar pipeline de feedback o función `update-summary` liviana).
+- [ ] **15.5** 🎨 Búsqueda por tag + texto (sobre `summary` / turnos).
+- [ ] **15.6** 🧠 Cross-link con Obsidian export (Fase 12): disparar export desde el detalle de una conversación del baúl.
+- [ ] **15.7** ✅ E2E: hablar sobre un tema → cerrar → reabrir al día siguiente desde el baúl → continuar la conversación por voz con la IA recordando el contexto.
+
 ---
 
 ## Fase UI.A — Design System Audit (post-iteración Figma 2026-06-21)
@@ -350,7 +424,7 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
   - `caption opacity 0.75 × textMuted 0.5 = 0.375 efectivo` (sospecha: ❌)
   - `danger` y `accent` sobre `background`
   Generar reporte con APCA o WCAG-AA y ajustar tokens.
-- [ ] **UI.A.20** 🎨 Implementar soporte de **`AccessibilityInfo.isReduceMotionEnabled()`**: sonar ring (HomeScreen), breath loop (mic scale), mount fades, ElasticSVG membranes, FadeInUp/FadeOutDown del End button → todos deben pausarse o reducirse cuando el sistema lo pide.
+- [~] **UI.A.20** 🎨 Implementar soporte de **`AccessibilityInfo.isReduceMotionEnabled()`**: sonar ring (HomeScreen), breath loop (mic scale), mount fades, FadeInUp/FadeOutDown del End button → todos deben pausarse o reducirse cuando el sistema lo pide. **PARCIAL 2026-06-22**: el drift del `MeshBackground` ya respeta reduce-motion vía `useReducedMotion()` (las membranas ElasticSVG fueron eliminadas, ver bloque K). Falta el resto de animaciones del Home.
 - [ ] **UI.A.21** 🎨 Reemplazar emojis severidad `🔴🟡🔵` por **íconos SVG semánticos** + label de texto en `FeedbackScreen` counters y badges. Mantener color como refuerzo, no como único indicador (regla `color-not-only`).
 - [ ] **UI.A.22** 🎨 Implementar **focus trap + escape route** en modales (Discard, Lang picker, Annotation tooltip): cerrar con Esc en web, con back-button hardware en Android, con swipe-down en iOS. Hoy solo cierran tapeando overlay.
 - [ ] **UI.A.23** 🎨 Soportar **Dynamic Type / Text Scale**: el sistema tipográfico tiene `fontSize` fijos. Cuando el usuario aumenta tamaño de fuente del SO, hay riesgo de truncado en headers y chips. Probar con escala iOS 200% y Android 1.3x; agregar `allowFontScaling` policy explícita por token.
@@ -390,7 +464,7 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ### I · Performance & rendering
 
-- [ ] **UI.A.42** 🧠 Auditar **mount cost de HorizontalNav**: las 3 pantallas (Roleplay, Home, SRS) montan side-by-side. Sonar loop + breath loop + blob animation corren en pantallas offscreen → CPU/GPU desperdiciado. Pausar animaciones cuando `currentPage !== index`.
+- [ ] **UI.A.42** 🧠 Auditar **mount cost de HorizontalNav**: las 3 pantallas (Roleplay, Home, SRS) montan side-by-side. Sonar loop + breath loop corren en pantallas offscreen → CPU/GPU desperdiciado. Pausar animaciones cuando `currentPage !== index`. **Nota 2026-06-22**: el fondo dejó de ser per-pantalla — ahora es un único `MeshBackground` GPU-compuesto a nivel de App (un solo view en vez de blob SVG + 2 ElasticSVG por página, ver bloque K). Reduce parte del costo offscreen.
 - [ ] **UI.A.43** 🧠 `FeedbackScreen` usa `ScrollView` para turnos. Sesiones >40 turnos producirán memory pressure. Migrar a `FlatList` con `removeClippedSubviews` antes de Fase 13.
 - [ ] **UI.A.44** 🧠 Auditar **re-render del Home** en cada cambio de `voiceStatus`: el componente raíz se re-renderiza completo (incluye todos los hijos). Memoizar `GlassLayers`, `HeaderBtnBorder` con `React.memo`.
 
@@ -399,11 +473,19 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **UI.A.45** 📦 Crear `crafting/UI_AUDIT_2026-06.md` con: tabla "Figma node ↔ código path ↔ spec sección", lista de divergencias, snapshot de tokens vigentes vs aplicados. Sirve como baseline para futuras auditorías y referencia para Gemini al generar nuevas pantallas.
 - [ ] **UI.A.46** 📦 Actualizar `DESIGN_SYSTEM.md § 8` (tabla de anti-patterns) con los hallazgos nuevos: dos implementaciones de glass, hardcoded font sizes, mix fill/outline icons, emoji severidad load-bearing, `surfaceSoft` no theme-aware.
 
+### K · Fondo Mesh Gradient (reemplaza blob SVG + ElasticSVG)
+
+- [x] **UI.A.47** 🎨 ~~Evaluar `expo-mesh-gradient` como reemplazo del fondo~~ → **HECHO 2026-06-22**: spike (`MeshGradientSpike`, descartado) validó en device los 3 tests — ambiental sin costura, drag siguiendo el dedo, ≥55fps en UI thread. Confirmado soporte iOS+Android en SDK 54 (v0.4.8, mín iOS 16.4).
+- [x] **UI.A.48** 🎨 ~~Crear `MeshBackground`~~ → **HECHO 2026-06-22**: componente único GPU-compuesto (`src/components/MeshBackground.tsx`), grid 3×3, paletas theme-aware en `theme/index.ts → meshGradient`, drift ambiental con reduce-motion. Montado una vez a nivel de `App`. Elimina la **costura rectangular** del blur SVG del blob.
+- [x] **UI.A.49** 🎨 ~~Reacción al swipe~~ → **HECHO 2026-06-22**: `HorizontalNav` escribe `meshSwipeX`/`meshTouchY` (shared values) en sus worklets; `MeshBackground` los lee y se inclina hacia el drag. El `withSpring(0)` del snap devuelve la inclinación a 0 de forma continua. Reemplaza el feedback de borde de las membranas.
+- [x] **UI.A.50** 🎨 ~~Eliminar `BackgroundBlob` + `ElasticSVG`~~ → **HECHO 2026-06-22**: ambos componentes borrados, sus referencias limpiadas, `blob` config retirado de theme. `ELASTIC_UI.md` marcado SUPERSEDED; `DESIGN_SYSTEM § 6` reescrito a "Fondo — Mesh Gradient".
+- [ ] **UI.A.51** 🎨 Afinar paletas del mesh (`meshGradient.dark`/`.light`) en device y validar que el contraste del texto/glass encima siga legible (las esquinas deben mantenerse cerca de `background`). Arranca con los valores del spike.
+
 ---
 
 ## Notas de ejecución
 
 - **Tasks atómicas pero no microscópicas**: cada una debería caber en 1-3 mensajes de iteración. Si una tarea crece, se subdivide al momento.
 - **Verificaciones ✅** son no negociables — no avanzar a la próxima fase con la verificación de la actual fallando.
-- **Costos de IA**: monitorear desde Fase 5 en adelante. Referencia de estimaciones en [COSTS.md](COSTS.md). Si OpenCode Go llega a saturarse, activar el plan fallback cambiando `LLM_ENDPOINT` y `LLM_MODEL` en las Edge Functions.
+- **Costos de IA**: monitorear desde Fase 5 en adelante. Referencia de estimaciones en [COSTS.md](COSTS.md). Si OpenCode Go llega a saturarse, activar el plan fallback cambiando `OPENCODE_BASE_URL` (alias: `LLM_ENDPOINT`) y `LLM_MODEL` en las Edge Functions.
 - **Multi-idioma extendido**, **modo "continuar roleplay"**, **conversation starters inteligentes** → defer a v2. Costo de ingeniería de nuevo idioma documentado en [ARCHITECTURE.md](ARCHITECTURE.md).

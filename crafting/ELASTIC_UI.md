@@ -4,6 +4,15 @@ keys: Fundamentos de animación, Reanimated, react native gesture handler
 
 ---
 
+> ## ⚠️ SUPERSEDED — 2026-06-22
+> La membrana Bézier SVG (`ElasticSVG`) descrita en este documento fue **reemplazada**
+> por el fondo `expo-mesh-gradient` (`MeshBackground`), que se **inclina hacia el swipe**
+> en vez de estirar un borde por página. El feedback de swipe pasa de "membrana de borde"
+> a "el fondo entero reacciona". Ver `DESIGN_SYSTEM.md § 6` y el historial de decisiones.
+> Este documento se conserva como **historia de diseño** del proceso de exploración.
+
+---
+
 ### Aclaración de la IA parte 1: 
 Sí te entiendo. Y lo que describes no es “solo un botón”. Estás intentando construir una interfaz con materialidad dinámica, casi como si el borde de la pantalla fuera una membrana viva 🌊
 

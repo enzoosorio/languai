@@ -50,6 +50,7 @@ Este archivo es el contexto de trabajo exclusivo para Claude (Sonnet 4.x). Defin
 | `crafting/MEMORY_SYSTEM.md` | RAG, Obsidian export, Weekly Report, GitHub sync |
 | `crafting/UX_UI.md` | Onboarding (5 pasos), pantallas, glassmorphism, swipes + fallbacks |
 | `crafting/COSTS.md` | Estimación costos (~$1.41/mes plan primario, ~$1.52 fallback) |
+| `crafting/KNOWLEDGE_VAULT.md` | Baúl de conocimiento (feature futura, Fase 15): conversaciones persistentes/reanudables, tags como carpetas, summary evolutivo |
 
 ---
 
@@ -71,7 +72,8 @@ Este archivo es el contexto de trabajo exclusivo para Claude (Sonnet 4.x). Defin
 
 ### Backend
 - **Supabase** como único backend (Edge Functions Deno, pgvector, Realtime, Auth Magic Link).
-- LLM via **OpenCode proxy** (plan Go). Fallback: cambiar `LLM_ENDPOINT` + `LLM_MODEL` a GPT-4o Mini directo.
+- LLM via **OpenCode proxy** (plan Go). Fallback: cambiar `OPENCODE_BASE_URL` + `LLM_MODEL` a GPT-4o Mini directo.
+  Las Edge Functions aceptan `LLM_ENDPOINT` como alias de `OPENCODE_BASE_URL` y `LLM_FEEDBACK_MODEL` como alias de `FEEDBACK_MODEL`, pero los nombres canónicos son los primeros.
 - Audio nunca se persiste — solo texto transcrito (privacidad + costo).
 - RLS activo en todas las tablas. Edge Functions usan service role key.
 
@@ -134,7 +136,9 @@ SUPABASE_SERVICE_ROLE_KEY=   # solo en Edge Functions, nunca en el cliente
 
 # LLM (OpenCode proxy)
 OPENCODE_API_KEY=
-OPENCODE_BASE_URL=
+OPENCODE_BASE_URL=          # alias aceptado: LLM_ENDPOINT
+LLM_MODEL=                  # modelo de chat-turn
+FEEDBACK_MODEL=             # modelo de generate-feedback; alias: LLM_FEEDBACK_MODEL
 
 # STT
 GROQ_API_KEY=

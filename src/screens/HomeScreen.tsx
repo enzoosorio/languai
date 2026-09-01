@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import type { AVPlaybackStatus } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 // Reanimated — keyboard sync + focus animations
 import Reanimated, {
@@ -29,6 +30,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useVoiceRecording } from '../hooks/useVoiceRecording';
 import { useUserStore } from '../stores/useUserStore';
 import { useSessionStore } from '../stores/useSessionStore';
+import { useFocusStore } from '../stores/useFocusStore';
 import { transcribe } from '../services/stt';
 import { speak } from '../services/tts';
 import { saveOnboarding } from '../services/settings';
@@ -42,12 +44,16 @@ const HEADER_BTN_SIZE   = 44;
 const HEADER_BTN_RADIUS = 14;
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
-type VoiceStatus = 'idle' | 'listening' | 'processing' | 'speaking';
+// 'preparing' = el texto de la IA ya llegó, pero el audio todavía se está
+// generando (TTS + descarga + carga del Sound). Antes este tramo se marcaba
+// como 'speaking' y la UI mentía durante 4-5 segundos.
+type VoiceStatus = 'idle' | 'listening' | 'processing' | 'preparing' | 'speaking';
 
 const HINT_TEXT: Record<VoiceStatus, string> = {
   idle:       'Tap to speak',
   listening:  'Listening… tap to send',
   processing: 'Processing…',
+  preparing:  'Preparing voice…',
   speaking:   'Speaking…',
 };
 
@@ -55,8 +61,15 @@ const MIC_ICON: Record<VoiceStatus, React.ComponentProps<typeof Ionicons>['name'
   idle:       'mic',
   listening:  'stop',
   processing: 'hourglass-outline',
+  preparing:  'sync-outline',
   speaking:   'radio-outline',
 };
+
+/**
+ * Si el audio nunca llega a sonar, el mic queda deshabilitado y el swipe
+ * bloqueado indefinidamente. Este techo garantiza volver siempre a 'idle'.
+ */
+const PREPARING_WATCHDOG_MS = 25000;
 
 const TARGET_LANGUAGES = [
   { code: 'en', label: 'English', flag: '🇺🇸' },
@@ -115,7 +128,66 @@ export const HomeScreen: React.FC<Props> = ({
   // ── Estado ─────────────────────────────────────────────────────────────────
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>('idle');
   const activeSoundRef = useRef<Audio.Sound | null>(null);
+  const watchdogRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
+
+  // ── Saneamiento de la máquina de estados de voz ─────────────────────
+  const clearWatchdog = () => {
+    if (!watchdogRef.current) return;
+    clearTimeout(watchdogRef.current);
+    watchdogRef.current = null;
+  };
+
+  const armWatchdog = () => {
+    clearWatchdog();
+    watchdogRef.current = setTimeout(() => {
+      console.warn('[Voice] audio never started — resetting state machine');
+      watchdogRef.current = null;
+      setVoiceStatus('idle');
+    }, PREPARING_WATCHDOG_MS);
+  };
+
+  /** Corta y descarga la voz de la IA en curso. Idempotente. */
+  const stopActiveSound = async () => {
+    const sound = activeSoundRef.current;
+    activeSoundRef.current = null;
+    if (!sound) return;
+    try {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+    } catch (err) {
+      console.warn('[Voice] stopActiveSound error:', err);
+    }
+  };
+
+  /**
+   * Único camino de cierre CON feedback. Antes cada callsite llamaba a
+   * onSessionClosing() directamente sin resetear voiceStatus: como focusLevel
+   * deriva de él, la app quedaba congelada en "Speaking…" con el mic
+   * deshabilitado y el swipe bloqueado, y el audio seguía sonando.
+   */
+  const closeSession = async () => {
+    clearWatchdog();
+    setVoiceStatus('idle');
+    await stopActiveSound();
+    onSessionClosing();
+  };
+
+  /** Descartar SIN feedback. Mismo saneamiento que closeSession. */
+  const discardSession = async () => {
+    clearWatchdog();
+    setVoiceStatus('idle');
+    await stopActiveSound();
+    await endSession();
+  };
+
+  // Al desmontar: ni timers ni audio huérfanos.
+  useEffect(() => {
+    return () => {
+      clearWatchdog();
+      void stopActiveSound();
+    };
+  }, []);
 
   // ── Focus level (derivado — no es estado independiente) ────────────────────
   // 0 = normal (idle, sin sesión) | 1 = parcial (grabando/procesando primer turno)
@@ -142,6 +214,10 @@ export const HomeScreen: React.FC<Props> = ({
     // Notificar al padre (bloquea swipe + membranas de HorizontalNav)
     onFocusChange(focusLevel);
 
+    // Enfoque global (vignette de bordes + lock de swipe vía store)
+    if (focusLevel !== 0) useFocusStore.getState().acquire('home');
+    else                  useFocusStore.getState().release('home');
+
     const toFull = focusLevel === 2;
 
     // YouTube pill: fade + scale + slight drop
@@ -155,6 +231,9 @@ export const HomeScreen: React.FC<Props> = ({
       { duration: 350 },
     ));
   }, [focusLevel]);
+
+  // Liberar el enfoque global si la pantalla se desmonta en foco
+  useEffect(() => () => { useFocusStore.getState().release('home'); }, []);
 
   const [ytUrl,       setYtUrl]       = useState('');
   const [showPicker,  setShowPicker]  = useState(false);
@@ -281,7 +360,7 @@ export const HomeScreen: React.FC<Props> = ({
         if (wordCount < 5) {
           persistTurn('user', userText);
           setPendingClose(false);
-          onSessionClosing();
+          await closeSession();
           return;
         }
         // ≥ 5 palabras → el usuario sigue hablando; continúa la conversación
@@ -328,33 +407,75 @@ export const HomeScreen: React.FC<Props> = ({
       }
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setVoiceStatus('speaking');
 
-      if (activeSoundRef.current) {
-        await activeSoundRef.current.stopAsync();
-        await activeSoundRef.current.unloadAsync();
-        activeSoundRef.current = null;
-      }
+      // 'preparing', no 'speaking': entre aquí y el primer frame audible hay un
+      // POST a OpenAI, un base64 en el JS thread, una escritura a disco y la
+      // carga del Sound — 4-5 s en los que antes la UI mentía.
+      setVoiceStatus('preparing');
+      armWatchdog();
+
+      await stopActiveSound();
 
       const audioPath = await speak(data.ai_text, lang);
-      const { sound } = await Audio.Sound.createAsync({ uri: audioPath });
-      activeSoundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync();
+
+      // El audio debe sonar aunque el switch de silencio del iPhone esté puesto.
+      // stopRecording() deja el modo en allowsRecordingIOS:false y hay que
+      // reafirmar playsInSilentModeIOS antes de reproducir.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS:   false,
+        playsInSilentModeIOS: true,
+      });
+
+      let started = false;
+      const onStatus = (status: AVPlaybackStatus) => {
+        if (!status.isLoaded) {
+          // Estado zombie: sin este guard, un fallo de carga dejaba voiceStatus
+          // en 'speaking' para siempre con el mic deshabilitado.
+          if (status.error) {
+            console.warn('[Voice] playback error:', status.error);
+            clearWatchdog();
+            activeSoundRef.current = null;
+            setVoiceStatus('idle');
+          }
+          return;
+        }
+
+        // ESTE es el único punto en el que la IA está hablando de verdad.
+        if (status.isPlaying && !started) {
+          started = true;
+          clearWatchdog();
+          setVoiceStatus('speaking');
+        }
+
+        if (status.didJustFinish) {
+          clearWatchdog();
+          void activeSoundRef.current?.unloadAsync();
           activeSoundRef.current = null;
           // ── 3.7.5: Si el LLM pidió cierre hard, abre SessionClosingScreen ──
           if (useSessionStore.getState().endRequested) {
             setEndRequested(false);
-            onSessionClosing();
+            void closeSession();
           } else {
             setVoiceStatus('idle');
           }
         }
-      });
-      await sound.playAsync();
+      };
+
+      // El callback va como TERCER argumento, no vía setOnPlaybackStatusUpdate
+      // después: con shouldPlay:true la reproducción arranca dentro de
+      // createAsync, y un clip corto podía terminar antes de que lo adjuntáramos
+      // — perdiendo didJustFinish y dejando la sesión sin cerrar.
+      // shouldPlay:true además sustituye a playAsync(), que resolvía al aceptar
+      // la orden y no en el primer frame audible.
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioPath },
+        { shouldPlay: true },
+        onStatus,
+      );
+      activeSoundRef.current = sound;
     } catch (err) {
       console.warn('[Voice] Error:', err);
+      clearWatchdog();
       setVoiceStatus('idle');
     }
   };
@@ -380,13 +501,13 @@ export const HomeScreen: React.FC<Props> = ({
       setShowDiscardModal(true);
     } else {
       // Menos de 1 intercambio completo → descartar sin modal
-      endSession();
+      void discardSession();
     }
   };
 
   const handleDiscardConfirm = async () => {
     setShowDiscardModal(false);
-    await endSession();
+    await discardSession();
   };
 
   // ── Derivados ──────────────────────────────────────────────────────────────
@@ -501,7 +622,11 @@ export const HomeScreen: React.FC<Props> = ({
                   onPressOut={() =>
                     Animated.spring(micPressScale, { toValue: 1.0, useNativeDriver: true, speed: 20, bounciness: 8 }).start()
                   }
-                  disabled={voiceStatus === 'processing' || voiceStatus === 'speaking'}
+                  disabled={
+                    voiceStatus === 'processing' ||
+                    voiceStatus === 'preparing'  ||
+                    voiceStatus === 'speaking'
+                  }
                   activeOpacity={1}
                   style={[
                     styles.micSquircle,
@@ -550,7 +675,14 @@ export const HomeScreen: React.FC<Props> = ({
         </Reanimated.View>
 
         {/* ── YouTube URL — sube con teclado, desaparece en focus completo ──── */}
-        <Reanimated.View style={[styles.ytContainer, { bottom: 20 + insets.bottom }, ytKeyboardStyle, ytFocusStyle]}>
+        {/* En focus completo solo baja a opacity 0: sigue MONTADA y sigue siendo
+            táctil, y con elevation 8 gana el hit-testing al botón End, que ocupa
+            exactamente el mismo `bottom`. Sin este pointerEvents el tap cae en el
+            TextInput invisible. */}
+        <Reanimated.View
+          pointerEvents={focusLevel === 2 ? 'none' : 'auto'}
+          style={[styles.ytContainer, { bottom: 20 + insets.bottom }, ytKeyboardStyle, ytFocusStyle]}
+        >
           {/* Glass */}
           <GlassFill isDark={isDark} />
           {/* Border overlay */}
@@ -614,7 +746,7 @@ export const HomeScreen: React.FC<Props> = ({
                   overflow:        'hidden',
                 },
               ]}
-              onPress={onSessionClosing}
+              onPress={closeSession}
               activeOpacity={0.75}
             >
               <GlassFill isDark={isDark} fillAlpha={0.06} blurIntensity={isDark ? 20 : 28} />
@@ -755,7 +887,7 @@ export const HomeScreen: React.FC<Props> = ({
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
 
-  // Raíz — transparente para que el BackgroundBlob de App.tsx sea visible
+  // Raíz — transparente para que el MeshBackground de App.tsx sea visible
   container: {
     flex:           1,
     alignItems:     'center',
@@ -856,6 +988,10 @@ const styles = StyleSheet.create({
   endBtnWrapper: {
     position:  'absolute',
     alignSelf: 'center',
+    // Comparte `bottom` con ytContainer, que tiene elevation 8. En Android la
+    // elevation gana el hit-testing, así que hay que superarla explícitamente.
+    zIndex:    10,
+    elevation: 12,
   },
   // Botón interno: sin posición propia, el wrapper la gestiona
   endBtn: {

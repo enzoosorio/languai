@@ -171,15 +171,36 @@ El nav bar base usa tier `ghost`. Los 5 botones de acciones usan tier `soft`. Es
 
 ---
 
-## 6. Blob Ambiental
+## 6. Fondo — Mesh Gradient
+
+> **Cambio 2026-06-22:** el blob SVG ambiental (`BackgroundBlob`) y las membranas
+> `ElasticSVG` fueron **reemplazados** por un único fondo `expo-mesh-gradient`.
+> Motivo: el blob SVG mostraba una **costura rectangular** en dark mode (la región
+> del `FeGaussianBlur` y el `<Animated.View>` clippeaban el halo sobre `#0C0D0B`).
+> El mesh es **GPU-compuesto** (no hay forma con borde que delate la costura),
+> theme-aware, y **reacciona al swipe** absorbiendo el rol de las membranas.
+
+### Componente
+- `src/components/MeshBackground.tsx` — montado **una vez** a nivel de `App`, detrás
+  de toda la UI (`StyleSheet.absoluteFill`, `pointerEvents="none"`).
+- Tokens en `theme/index.ts` → `meshGradient`.
 
 ### Especificaciones
-- **Color**: `rgba(233, 235, 214, 0.20)` — sage al 20% (no protagonista)
-- **Tamaño**: ~60% del ancho de pantalla (antes era 92% — demasiado grande)
-- **Posición base**: fondo inferior-centro, parcialmente fuera del viewport
-- **Animación**: scale loop suave 8s, rango `1.0 → 1.04` (antes 1.06 — reducido)
-- **Blur de fondo**: el blob SVG se acompaña de un `blur(200px)` para simular el efecto de halo del Figma
-- **¿Se mueve por la pantalla?**: pendiente exploración técnica en React Native — el SVG animado actual solo respira (scale). Para movimiento XY real se necesita `react-native-reanimated` con `withRepeat` + `withTiming` en `translateX/Y`. Documentar en TASKS.md como mejora Phase 2.5.
+- **Grid**: 3×3 = 9 vértices, espacio normalizado `0..1`.
+- **Paleta** (9 colores theme-aware, `meshGradient.dark` / `.light`): las **esquinas**
+  se mantienen cerca de `background` para no lavar el contenido/glass que va encima;
+  el **sage/olive** vive en el centro y mid-edges.
+- **Drift ambiental**: los vértices centrales describen una **órbita** lenta (sin/cos con
+  frecuencias distintas → orgánico) — `driftDurationMs 9000`, `driftAmplitude 0.26`.
+  Reemplaza el breathe/scale del blob. Reanimated, UI thread.
+- **Reacción al swipe**: el fondo se **inclina** hacia el drag. `HorizontalNav` escribe
+  `meshSwipeX` (normalizado `translationX/width`) y `meshTouchY` (`absoluteY/height`);
+  `MeshBackground` los lee en `useAnimatedProps` y deforma los `points`. El `onEnd` del
+  carousel ya hace `withSpring(0)` → la inclinación vuelve a 0 de forma continua.
+  Bloqueado el swipe (`focusLevel !== 0`) → `meshSwipeX` queda en 0, solo drift.
+- **Reduce-motion**: con `AccessibilityInfo` (vía `useReducedMotion()` de Reanimated)
+  el drift se congela en posición neutra.
+- **Plataforma**: `expo-mesh-gradient` v0.4.x soporta iOS+Android en SDK 54 (mínimo iOS 16.4).
 
 ---
 
@@ -212,7 +233,7 @@ El nav bar base usa tier `ghost`. Los 5 botones de acciones usan tier `soft`. Es
 - [ ] ¿Los radios corresponden a los tokens definidos (no valores ad-hoc)?
 - [ ] ¿Hay máximo 2 tiers de glass distintos en la pantalla?
 - [ ] ¿El mismo nivel de elemento (nav item, card, bubble) usa el mismo tier en toda la app?
-- [ ] ¿El blob usa `rgba(233,235,214,0.30)` en dark y `rgba(233,235,214,0.80)` en light?
+- [ ] ¿El fondo es el `MeshBackground` único de App (no blobs/membranas SVG por pantalla)?
 - [ ] ¿No hay bordes de color (lima, verde, etc.) en elementos glass?
 
 ### Anti-patterns detectados (a corregir)
@@ -234,6 +255,7 @@ El nav bar base usa tier `ghost`. Los 5 botones de acciones usan tier `soft`. Es
 
 | Fecha | Decisión | Motivo |
 |---|---|---|
+| 2026-06-22 | Fondo blob SVG + ElasticSVG → `MeshBackground` (expo-mesh-gradient) | El blob SVG mostraba costura rectangular (clip del FeGaussianBlur) en dark; el mesh es GPU-compuesto, theme-aware y reacciona al swipe (absorbe las membranas). Spike validado a 60fps en device |
 | 2026-05-24 | Background dark = `#0C0D0B` | El `#1A1F18` tenía sesgo verde-bosque incompatible con glass neutro |
 | 2026-05-24 | Blob opacity = 20% (no 40%) | 40% era protagonista; blob debe ser ambiental |
 | 2026-05-24 | Blob dark → 30% (was 20%) | 20% era invisible en pantalla física; 30% mantiene ambientalidad y es perceptible |

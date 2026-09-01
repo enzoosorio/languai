@@ -271,14 +271,46 @@ export const radius = {
   circle: 9999, // botón mic, avatares
 } as const;
 
-// ─── BLOB ─────────────────────────────────────────────────────────────────────
+// ─── MESH GRADIENT BACKGROUND ──────────────────────────────────────────────────
+// Fondo ambiental GPU-compuesto (expo-mesh-gradient). Reemplaza el blob SVG
+// (costura rectangular del blur) y las membranas ElasticSVG (reacción al swipe).
+// Ver: crafting/DESIGN_SYSTEM.md § 6
+//
+// Grid 3×3 = 9 vértices, espacio normalizado 0..1. Las paletas tienen 9 colores
+// (uno por vértice). Las esquinas se mantienen cerca de `background` para no lavar
+// el contenido/glass que va encima; el sage/olive vive en el centro y mid-edges.
 
-export const blob = {
-  sizeFactor:     0.85,  // 85% del ancho de pantalla — más presente, sigue ambiental
-  scaleTo:        1.04,  // amplitude del breath loop (era 1.06 — suavizado)
-  durationMs:     8000,  // duración de cada fase del loop
-  blurRadius:     200,   // px de blur de halo (simulado via filter en SVG)
-} as const;
+export const meshGradient = {
+  columns: 3,
+  rows:    3,
+  // Paletas theme-aware (9 colores, fila por fila):
+  //   [ TL,  T,  TR ]
+  //   [  L,  C,   R ]
+  //   [ BL,  B,  BR ]
+  dark: [
+    '#0C0D0B', '#14160F', '#0C0D0B',   // background → sutil cálido → background
+    '#1B2410', '#2E3B14', '#141A0C',   // sage profundo → olive (centro) → sage tenue
+    '#0C0D0B', '#10130C', '#0C0D0B',
+  ],
+  light: [
+    '#FAFAF7', '#F2F4E8', '#FAFAF7',
+    '#EDF1DE', '#D2E0AC', '#EDF1DE',   // verde concentrado en el centro, lados tenues
+    '#FAFAF7', '#F2F4E8', '#FAFAF7',
+  ],
+  // Órbita ambiental — los vértices centrales describen un círculo lento (sin/cos).
+  driftAmplitude:  0.26,  // ± en espacio del mesh (0..1) — perceptible a ojo humano
+  driftDurationMs: 9000,  // vuelta completa de la órbita
+  // Lean por swipe — cuánto se inclina el mesh hacia el drag (espacio del mesh).
+  swipeLeanMax:    0.55,
+} as const satisfies {
+  columns: number;
+  rows: number;
+  dark: string[];
+  light: string[];
+  driftAmplitude: number;
+  driftDurationMs: number;
+  swipeLeanMax: number;
+};
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 

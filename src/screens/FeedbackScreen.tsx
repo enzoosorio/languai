@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 import { supabase } from '../lib/supabase';
@@ -85,10 +86,32 @@ function severityColors(severity: Annotation['severity'], isDark: boolean) {
   }
 }
 
-const SEVERITY_EMOJI: Record<Annotation['severity'], string> = {
-  error:       '🔴',
-  warning:     '🟡',
-  improvement: '🔵',
+// ── SeverityDot ───────────────────────────────────────────────────────────────
+// Bolita SVG con gradiente radial — reemplaza los emojis 🔴🟡🔵 para tono y
+// forma consistentes entre iOS y Android.
+const DOT_GRADIENT: Record<Annotation['severity'], { light: string; dark: string }> = {
+  error:       { light: '#E86A5E', dark: '#B43C32' },
+  warning:     { light: '#E8CC6A', dark: '#C9A227' },
+  improvement: { light: '#7FA6E8', dark: '#4A7AD3' },
+};
+
+const SeverityDot: React.FC<{ severity: Annotation['severity']; size?: number }> = ({
+  severity, size = 12,
+}) => {
+  const { light, dark } = DOT_GRADIENT[severity];
+  const gid = `dot-${severity}`;
+  const r = size / 2;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 12 12">
+      <Defs>
+        <RadialGradient id={gid} cx="38%" cy="32%" r="75%">
+          <Stop offset="0%"   stopColor={light} stopOpacity={1} />
+          <Stop offset="100%" stopColor={dark}  stopOpacity={1} />
+        </RadialGradient>
+      </Defs>
+      <Circle cx={r} cy={r} r={r} fill={`url(#${gid})`} />
+    </Svg>
+  );
 };
 
 // ── AnnotatedText ─────────────────────────────────────────────────────────────
@@ -341,9 +364,24 @@ export const FeedbackScreen: React.FC<Props> = ({ sessionId, onClose }) => {
           </TouchableOpacity>
           {/* Counters */}
           <View style={styles.counters}>
-            {counts.error       > 0 && <Text style={styles.counter}>🔴 {counts.error}</Text>}
-            {counts.warning     > 0 && <Text style={styles.counter}>🟡 {counts.warning}</Text>}
-            {counts.improvement > 0 && <Text style={styles.counter}>🔵 {counts.improvement}</Text>}
+            {counts.error > 0 && (
+              <View style={styles.counterItem}>
+                <SeverityDot severity="error" size={11} />
+                <Text style={[styles.counter, { color: colors.textMuted }]}>{counts.error}</Text>
+              </View>
+            )}
+            {counts.warning > 0 && (
+              <View style={styles.counterItem}>
+                <SeverityDot severity="warning" size={11} />
+                <Text style={[styles.counter, { color: colors.textMuted }]}>{counts.warning}</Text>
+              </View>
+            )}
+            {counts.improvement > 0 && (
+              <View style={styles.counterItem}>
+                <SeverityDot severity="improvement" size={11} />
+                <Text style={[styles.counter, { color: colors.textMuted }]}>{counts.improvement}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -375,7 +413,7 @@ export const FeedbackScreen: React.FC<Props> = ({ sessionId, onClose }) => {
       )}
 
       {/* ── Tags ────────────────────────────────────────────────────────── */}
-      {session?.tags?.length > 0 && (
+      {session?.tags && session.tags.length > 0 && (
         <View style={[styles.tagsRow, { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 }]}>
           {session.tags.map((tag) => (
             <View
@@ -508,8 +546,9 @@ export const FeedbackScreen: React.FC<Props> = ({ sessionId, onClose }) => {
                 backgroundColor: severityColors(selectedAnn.severity, isDark).bg,
                 borderColor:     severityColors(selectedAnn.severity, isDark).underline,
               }]}>
+                <SeverityDot severity={selectedAnn.severity} size={12} />
                 <Text style={[styles.severityBadgeText, { color: severityColors(selectedAnn.severity, isDark).badge }]}>
-                  {SEVERITY_EMOJI[selectedAnn.severity]} {selectedAnn.severity} · {selectedAnn.category}
+                  {selectedAnn.severity} · {selectedAnn.category}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setSelectedAnn(null)} hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}>
@@ -632,8 +671,13 @@ const styles = StyleSheet.create({
   },
   counters: {
     flexDirection: 'row',
-    gap:           8,
-    marginTop:     3,
+    gap:           10,
+    marginTop:     4,
+  },
+  counterItem: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           4,
   },
   counter: {
     fontSize:   12,
@@ -741,6 +785,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   severityBadge: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               6,
     paddingHorizontal: 10,
     paddingVertical:   4,
     borderRadius:      8,

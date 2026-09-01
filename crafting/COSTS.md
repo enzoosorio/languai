@@ -136,7 +136,7 @@ Estimación de costos operativos por sesión y por mes. Incluye el **plan primar
 Activar si el Plan Go se satura o no está disponible:
 
 1. **Inmediato:** Cambiar endpoint del LLM de OpenCode proxy a OpenAI API directa con GPT-4o Mini.
-   - Variable de entorno: `LLM_ENDPOINT` y `LLM_MODEL` en Edge Functions.
+   - Variable de entorno: `OPENCODE_BASE_URL` (alias: `LLM_ENDPOINT`) y `LLM_MODEL` en Edge Functions.
    - Sin cambio de código, solo cambio de config.
 2. **Si el costo TTS escala** (múltiples usuarios): Evaluar cambio a ElevenLabs Pay-as-you-go solo para voz principal, mantener `nova` para deep-dives.
 3. **Umbral de alerta:** Si el costo mensual supera $10 (escenario multi-usuario), revisar:

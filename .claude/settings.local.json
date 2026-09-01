@@ -6,7 +6,9 @@
       "mcp__figma-developer-mcp__get_figma_data",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npx tsc *)"
     ]
   }
 }

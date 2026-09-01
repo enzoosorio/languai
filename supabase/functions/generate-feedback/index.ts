@@ -1,4 +1,6 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// Versión EXACTA a propósito: con el rango flotante `@2`, un bump upstream
+// podía romper el bundle en un redeploy sin cambiar una línea de este archivo.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,20 +44,46 @@ function defaultWeight(severity: FeedbackAnnotation['severity']): number {
 }
 
 // ── Llama al LLM y parsea JSON (con 2 reintentos) ───────────────────────────
+// ── Resultado del LLM ────────────────────────────────────────
+// Antes cualquier `!res.ok` se convertía en `null` y acababa reportándose como
+// 'parse_error': un 401 por API key rotada era indistinguible de un LLM que
+// devuelve JSON malformado. Ahora se separan, y el motivo llega al cliente.
+interface LLMFailure {
+  kind:   'llm_error' | 'parse_error';
+  detail: string;
+}
+
+function isFailure(x: FeedbackJSON | LLMFailure): x is LLMFailure {
+  return 'kind' in x;
+}
+
 async function callLLMForFeedback(
   messages: Array<{ role: string; content: string }>,
   apiKey: string,
   baseUrl: string,
   model: string,
-): Promise<FeedbackJSON | null> {
+): Promise<FeedbackJSON | LLMFailure> {
 
-  const tryParse = async (msgs: typeof messages): Promise<FeedbackJSON | null> => {
-    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages: msgs, temperature: 0.3, max_tokens: 3000 }),
-    });
-    if (!res.ok) return null;
+  const tryParse = async (msgs: typeof messages): Promise<FeedbackJSON | LLMFailure> => {
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages: msgs, temperature: 0.3, max_tokens: 3000 }),
+      });
+    } catch (err) {
+      return {
+        kind:   'llm_error',
+        detail: `network: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`[generate-feedback] LLM HTTP ${res.status}:`, body.slice(0, 500));
+      return { kind: 'llm_error', detail: `HTTP ${res.status}` };
+    }
 
     const data = await res.json();
     const content: string = data.choices?.[0]?.message?.content ?? '';
@@ -69,15 +97,19 @@ async function callLLMForFeedback(
 
     try {
       const parsed = JSON.parse(cleaned);
-      return validateFeedback(parsed) ? (parsed as FeedbackJSON) : null;
+      if (validateFeedback(parsed)) return parsed as FeedbackJSON;
+      return { kind: 'parse_error', detail: 'schema mismatch' };
     } catch {
-      return null;
+      return { kind: 'parse_error', detail: 'JSON.parse failed' };
     }
   };
 
   // Intento 1: prompt original
   let result = await tryParse(messages);
-  if (result) return result;
+  if (!isFailure(result)) return result;
+  // Un fallo de transporte/auth no se arregla reformulando el prompt: cortamos
+  // aquí en vez de gastar dos reintentos más contra el mismo 401.
+  if (result.kind === 'llm_error') return result;
 
   // Intento 2: mismo historial + instrucción de formato estricto
   const retry1 = [
@@ -92,7 +124,8 @@ async function callLLMForFeedback(
     },
   ];
   result = await tryParse(retry1);
-  if (result) return result;
+  if (!isFailure(result)) return result;
+  if (result.kind === 'llm_error') return result;
 
   // Intento 3: prompt mínimo — solo campos obligatorios
   const minimalSystem =
@@ -143,10 +176,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // No reprocesar si ya está done o processing
-    if (session.feedback_status === 'done' || session.feedback_status === 'processing') {
+    // Solo 'done' es terminal. Antes 'processing' también cortaba aquí, y como
+    // el catch de abajo nunca revertía ese estado, una sola excepción dejaba la
+    // sesión atascada PARA SIEMPRE: cada reintento devolvía 200 + 'processing'
+    // y el cliente abría un FeedbackScreen vacío, sin ninguna ruta de salida.
+    if (session.feedback_status === 'done') {
       return new Response(
-        JSON.stringify({ feedback_status: session.feedback_status }),
+        JSON.stringify({ feedback_status: 'done' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -211,6 +247,8 @@ Deno.serve(async (req) => {
       `  If the substring does not appear verbatim in a user turn, DO NOT include that annotation.\n` +
       `- ONLY annotate USER turns. Never annotate AI turns.\n` +
       `- Keep "text" SHORT — the minimal span that contains the problem (1-6 words), not the whole sentence.\n` +
+      `- "text" MUST be a meaningful word or phrase (at least 2 characters, real words). NEVER a single\n` +
+      `  letter, an acronym fragment, or punctuation (e.g. do not emit "U" or "I" as a span).\n` +
       `- severity: "error" = grammatically wrong; "warning" = unnatural/awkward but understandable;\n` +
       `  "improvement" = correct but a native would phrase it better.\n` +
       `- track: true for items worth studying later (most errors + notable warnings). Provide "lemma"\n` +
@@ -227,22 +265,55 @@ Deno.serve(async (req) => {
     ];
 
     // ── LLM ─────────────────────────────────────────────────────────────────
+    // LLM_ENDPOINT / LLM_FEEDBACK_MODEL son los nombres que documentan CLAUDE.md,
+    // COSTS.md y MODELS.md; OPENCODE_* / FEEDBACK_MODEL son los que leía el código.
+    // Aceptamos ambos para que configurar el secreto "documentado" no falle en silencio.
     const apiKey  = Deno.env.get('OPENCODE_API_KEY') ?? Deno.env.get('OPENAI_API_KEY') ?? '';
-    const baseUrl = Deno.env.get('OPENCODE_BASE_URL') ?? 'https://api.openai.com';
-    const model   = Deno.env.get('FEEDBACK_MODEL') ?? Deno.env.get('LLM_MODEL') ?? 'gpt-4o-mini';
+    const baseUrl = Deno.env.get('OPENCODE_BASE_URL')
+      ?? Deno.env.get('LLM_ENDPOINT')
+      ?? 'https://api.openai.com';
+    const model   = Deno.env.get('FEEDBACK_MODEL')
+      ?? Deno.env.get('LLM_FEEDBACK_MODEL')
+      ?? Deno.env.get('LLM_MODEL')
+      ?? 'gpt-4o-mini';
 
-    const feedback = await callLLMForFeedback(messages, apiKey, baseUrl, model);
-
-    if (!feedback) {
+    // Guard clause como en chat-turn: sin esto, una key vacía manda
+    // `Authorization: Bearer ` → 401 → se reportaba como 'parse_error'.
+    if (!apiKey) {
+      console.error('[generate-feedback] no API key configured');
       await supabase
         .from('sessions')
         .update({ feedback_status: 'failed' })
         .eq('id', session_id);
       return new Response(
-        JSON.stringify({ feedback_status: 'failed', reason: 'parse_error' }),
+        JSON.stringify({
+          feedback_status: 'failed',
+          reason:  'llm_error',
+          detail:  'missing API key (OPENCODE_API_KEY / OPENAI_API_KEY)',
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
       );
     }
+
+    const result = await callLLMForFeedback(messages, apiKey, baseUrl, model);
+
+    if (isFailure(result)) {
+      console.error('[generate-feedback] LLM failed:', result.kind, result.detail);
+      await supabase
+        .from('sessions')
+        .update({ feedback_status: 'failed' })
+        .eq('id', session_id);
+      return new Response(
+        JSON.stringify({
+          feedback_status: 'failed',
+          reason: result.kind,
+          detail: result.detail,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+      );
+    }
+
+    const feedback = result;
 
     // ── Persistir anotaciones + tracked_items (modelo unificado) ─────────────
     // Para cada anotación: localizamos el substring verbatim dentro de un turno
@@ -254,10 +325,21 @@ Deno.serve(async (req) => {
     for (const ann of feedback.annotations) {
       if (!ann.text || typeof ann.text !== 'string') continue;
 
+      // Descartar spans basura: 1 char, letras sueltas o fragmentos sin sentido
+      // (ej. el LLM extrajo "U" con lemma "user interface"). Mínimo 2 chars + alguna letra.
+      const clean = ann.text.trim();
+      if (clean.length < 2 || !/[a-zA-Z]{2,}/.test(clean)) {
+        console.warn('[generate-feedback] skipping junk span:', JSON.stringify(ann.text));
+        continue;
+      }
+
       // Localizar el turno del usuario que contiene el substring (case-insensitive,
       // pero el offset es válido sobre el texto original porque toLowerCase no
       // cambia la longitud en estos scripts).
-      const needle = ann.text.toLowerCase();
+      // `clean`, no `ann.text`: si el LLM devuelve " take lunch" con espacio, el
+      // indexOf fallaba o el span quedaba desplazado y el subrayado caía sobre
+      // el texto equivocado. El filtro de basura de arriba ya usaba `clean`.
+      const needle = clean.toLowerCase();
       let matchTurn: typeof turns[number] | null = null;
       let spanStart = -1;
 
@@ -273,7 +355,7 @@ Deno.serve(async (req) => {
       // Si el LLM alucinó un substring que no existe verbatim → lo saltamos.
       if (!matchTurn || spanStart === -1) continue;
 
-      const spanEnd = spanStart + ann.text.length;
+      const spanEnd = spanStart + clean.length;
 
       // ── tracked_item (si aplica) ───────────────────────────────────────────
       let trackedItemId: string | null = null;
@@ -301,7 +383,7 @@ Deno.serve(async (req) => {
             .from('tracked_items')
             .insert({
               user_id:            session.user_id,
-              text:               ann.text,
+              text:               clean,
               lemma:              ann.lemma,
               severity:           ann.severity,
               category:           ann.category,
@@ -358,8 +440,32 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error('[generate-feedback] unexpected error:', err);
+
+    // CRÍTICO: la sesión ya quedó marcada como 'processing' más arriba. Sin este
+    // rollback, cualquier excepción la dejaba atascada en ese estado para siempre.
+    try {
+      const body = await req.clone().json().catch(() => ({}));
+      const sid = (body as { session_id?: string }).session_id;
+      if (sid) {
+        const admin = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+        );
+        await admin
+          .from('sessions')
+          .update({ feedback_status: 'failed' })
+          .eq('id', sid);
+      }
+    } catch (rollbackErr) {
+      console.error('[generate-feedback] rollback failed:', rollbackErr);
+    }
+
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : 'Error desconocido' }),
+      JSON.stringify({
+        feedback_status: 'failed',
+        reason: 'internal_error',
+        error:  err instanceof Error ? err.message : 'Error desconocido',
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 },
     );
   }
