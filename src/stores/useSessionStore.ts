@@ -5,24 +5,48 @@ import { useUserStore } from './useUserStore';
 type SessionMode = 'free' | 'roleplay' | 'deep_dive';
 
 interface SessionState {
-  sessionId: string | null;
-  turnIndex: number;
-  language: string;
-  level: string;
-  mode: SessionMode;
-  isActive: boolean;
-  startSession: (lang: string, level: string, mode?: SessionMode) => Promise<void>;
-  persistTurn: (speaker: 'user' | 'ai', text: string) => void;
-  endSession: () => Promise<void>;
+  sessionId:    string | null;
+  turnIndex:    number;
+  language:     string;
+  level:        string;
+  mode:         SessionMode;
+  isActive:     boolean;
+  /** La IA llamó end_conversation con confidence ≥ 0.85 */
+  endRequested: boolean;
+  /** La IA llamó end_conversation con confidence 0.50–0.84 (soft close) */
+  pendingClose: boolean;
+
+  startSession:    (lang: string, level: string, mode?: SessionMode) => Promise<void>;
+  persistTurn:     (speaker: 'user' | 'ai', text: string) => void;
+  /**
+   * Espera a que terminen los inserts de turnos en vuelo.
+   * `persistTurn` es fire-and-forget para no bloquear el loop de voz, pero
+   * generate-feedback lee los turnos de la DB y exige >= 4: sin este flush,
+   * cerrar la sesión justo después de hablar devuelve `too_short` por una race.
+   */
+  flushTurns:      () => Promise<void>;
+  endSession:      () => Promise<void>;
+  setEndRequested: (val: boolean) => void;
+  setPendingClose: (val: boolean) => void;
 }
 
+/**
+ * Inserts de turnos en vuelo. Vive fuera del store porque no es estado de UI:
+ * nada re-renderiza al cambiar, y así evitamos renders por cada turno.
+ */
+// PromiseLike, no Promise: el builder de supabase-js es un thenable, no una
+// instancia real de Promise (no tiene .catch ni .finally).
+let pendingTurnWrites: PromiseLike<unknown>[] = [];
+
 export const useSessionStore = create<SessionState>((set, get) => ({
-  sessionId: null,
-  turnIndex: 0,
-  language: '',
-  level: '',
-  mode: 'free',
-  isActive: false,
+  sessionId:    null,
+  turnIndex:    0,
+  language:     '',
+  level:        '',
+  mode:         'free',
+  isActive:     false,
+  endRequested: false,
+  pendingClose: false,
 
   startSession: async (lang, level, mode = 'free') => {
     const user = useUserStore.getState().user;
@@ -52,15 +76,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const { sessionId, turnIndex } = get();
     if (!sessionId) return;
 
-    // Fire-and-forget — never blocks the voice loop
-    supabase
+    // Fire-and-forget — never blocks the voice loop, pero guardamos la promesa
+    // para poder esperarla en flushTurns() antes de generar el feedback.
+    const write = supabase
       .from('session_turns')
       .insert({ session_id: sessionId, idx: turnIndex, speaker, text })
       .then(({ error }) => {
         if (error) console.warn('persistTurn error:', error.message);
       });
 
+    pendingTurnWrites.push(write);
+
     set({ turnIndex: turnIndex + 1 });
+  },
+
+  flushTurns: async () => {
+    if (pendingTurnWrites.length === 0) return;
+    const inFlight = pendingTurnWrites;
+    pendingTurnWrites = [];
+    // allSettled: un insert fallido no debe impedir el cierre de la sesión.
+    await Promise.allSettled(inFlight);
   },
 
   endSession: async () => {
@@ -74,6 +109,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     if (error) console.warn('endSession error:', error.message);
 
-    set({ sessionId: null, isActive: false, turnIndex: 0 });
+    pendingTurnWrites = [];
+
+    set({
+      sessionId:    null,
+      isActive:     false,
+      turnIndex:    0,
+      endRequested: false,
+      pendingClose: false,
+    });
   },
+
+  setEndRequested: (val) => set({ endRequested: val }),
+  setPendingClose: (val) => set({ pendingClose: val }),
 }));

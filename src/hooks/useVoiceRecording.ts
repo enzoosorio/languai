@@ -53,7 +53,14 @@ export const useVoiceRecording = (): UseVoiceRecording => {
       await recording.stopAndUnloadAsync();
       recordingRef.current = null;
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      // setAudioModeAsync REEMPLAZA el objeto de modo entero: pasar solo
+      // allowsRecordingIOS revertía playsInSilentModeIOS a false, y entonces la
+      // respuesta TTS no sonaba si el switch de silencio del iPhone estaba puesto
+      // (la UI decía "Speaking..." en silencio absoluto).
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS:   false,
+        playsInSilentModeIOS: true,
+      });
 
       const durationMs = statusInfo.isRecording ? statusInfo.durationMillis ?? 0 : 0;
 

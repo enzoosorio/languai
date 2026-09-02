@@ -108,26 +108,26 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 3 — Voice pipeline (modo libre MVP loop)
 
-- [ ] **3.1** 🧠 Servicio STT en `src/services/stt.ts` usando **Groq Whisper** API. Función `transcribe(audioBlob, lang) → text`.
-- [ ] **3.2** 🎨 Hook `useVoiceRecording()` con `expo-av`: tap start, tap stop, devuelve audio blob. Indicador visual "Listening...". **Edge case:** si la duración del audio < 2 segundos, descartar silenciosamente y volver a estado "Tap to Speak" sin llamar a Groq.
-- [ ] **3.3** 🧠 Extender Edge Function `chat-turn`: recibe `{ session_id, user_text, lang, level }`, llama al LLM vía proxy OpenCode con system prompt base, devuelve `{ ai_text }`.
-- [ ] **3.4** 🧠 Servicio TTS en `src/services/tts.ts` (OpenAI TTS para empezar — barato). Función `speak(text, lang) → audio URL`.
-- [ ] **3.5** 🎨 Animación de ondas sonoras (Reanimated) que reacciona al input/output de audio. Estados: idle / listening / processing / speaking.
-- [ ] **3.6** 🎨 Haptics: tap suave al iniciar grabación, doble vibración cuando empieza respuesta de IA.
-- [ ] **3.7** ✅ Loop end-to-end: hablo en Home → veo "Processing..." → escucho respuesta IA. Probar en EN y DE. Probar audio < 2s → debe ignorarse sin error.
+- [x] **3.1** 🧠 Servicio STT en `src/services/stt.ts` usando **Groq Whisper** API. Función `transcribe(audioBlob, lang) → text`.
+- [x] **3.2** 🎨 Hook `useVoiceRecording()` con `expo-av`: tap start, tap stop, devuelve audio blob. Indicador visual "Listening...". **Edge case:** si la duración del audio < 2 segundos, descartar silenciosamente y volver a estado "Tap to Speak" sin llamar a Groq.
+- [x] **3.3** 🧠 Extender Edge Function `chat-turn`: recibe `{ session_id, user_text, lang, level }`, llama al LLM vía proxy OpenCode con system prompt base, devuelve `{ ai_text }`. Incluye fetch de historial desde DB (últimos 20 turnos). Fix de race condition: `persistTurn(user)` se llama post-respuesta, no pre-request.
+- [x] **3.4** 🧠 Servicio TTS en `src/services/tts.ts` (OpenAI TTS para empezar — barato). Función `speak(text, lang) → audio URL`.
+- [x] **3.5** 🎨 Animación de ondas sonoras (Reanimated) que reacciona al input/output de audio. Estados: idle / listening / processing / speaking.
+- [x] **3.6** 🎨 Haptics: tap suave al iniciar grabación, doble vibración cuando empieza respuesta de IA.
+- [x] **3.7** ✅ Loop end-to-end: hablo en Home → veo "Processing..." → escucho respuesta IA. Probar en EN y DE. Probar audio < 2s → debe ignorarse sin error.
 
 ## Fase 3.7 — Focus Mode UI + End-of-conversation detection
 
 > Foco: separar visualmente el modo "idle" del modo "en conversación", agregar detección de despedida vía tool call, sentar las bases para el flujo `closing → summary`. Detalle completo en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md).
 
-- [ ] **3.7.1** 🎨 Implementar fade progresivo en `HomeScreen`: 3 niveles (Normal / Focus parcial / Focus completo). Animar opacity de edges + swipe disable con `Animated`/`Reanimated`.
-- [ ] **3.7.2** 🎨 Botón "End conversation" en footer durante focus completo (oculto en idle). Usar `colors.danger` con glass tint.
-- [ ] **3.7.3** 🎨 Botón Back ← top-left durante focus. Tap → modal de confirmación si `turnIndex >= 2`: "Discard this conversation? Progress won't be saved." [Discard] / [Keep talking].
-- [ ] **3.7.4** 🧠 Agregar tool `end_conversation` al request del `chat-turn` Edge Function con schema definido en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md) §3.2.
-- [ ] **3.7.5** 🧠 En la app, leer `tool_calls` de la respuesta del chat-turn. Si `confidence >= 0.85` → set `sessionStore.endRequested = true` → reproducir audio del `ai_text` final → trigger flujo `closing`.
-- [ ] **3.7.6** 🧠 Si `0.50 <= confidence < 0.85` → setear `sessionStore.pendingClose = true`. Si el próximo turno del usuario es <5 palabras y afirmativo → cerrar. Si no → reset `pendingClose`.
-- [ ] **3.7.7** 🎨 Componente `<SessionClosingScreen />` (loader full-screen) — texto "Wrapping up your conversation…" + spinner + skeleton del summary. Timeout 8s → mostrar opción "View partial summary".
-- [ ] **3.7.8** ✅ Conversación libre con focus mode: tap mic → ver fade parcial → recibir respuesta IA → ver focus completo. Decir "see you later" → IA cierra. Decir "And I said goodbye to him" → IA NO cierra. Tapear End → ver loader.
+- [x] **3.7.1** 🎨 Implementar fade progresivo en `HomeScreen`: 3 niveles (Normal / Focus parcial / Focus completo). Animar opacity de edges + swipe disable con `Animated`/`Reanimated`.
+- [x] **3.7.2** 🎨 Botón "End conversation" en footer durante focus completo (oculto en idle). Usar `colors.danger` con glass tint.
+- [x] **3.7.3** 🎨 Botón Back ← top-left durante focus. Tap → modal de confirmación si `turnIndex >= 2`: "Discard this conversation? Progress won't be saved." [Discard] / [Keep talking].
+- [x] **3.7.4** 🧠 Agregar tool `end_conversation` al request del `chat-turn` Edge Function con schema definido en [CONVERSATION_LIFECYCLE.md](CONVERSATION_LIFECYCLE.md) §3.2.
+- [x] **3.7.5** 🧠 En la app, leer `tool_calls` de la respuesta del chat-turn. Si `confidence >= 0.85` → set `sessionStore.endRequested = true` → reproducir audio del `ai_text` final → trigger flujo `closing`.
+- [x] **3.7.6** 🧠 Si `0.50 <= confidence < 0.85` → setear `sessionStore.pendingClose = true`. Si el próximo turno del usuario es <5 palabras y afirmativo → cerrar. Si no → reset `pendingClose`.
+- [x] **3.7.7** 🎨 Componente `<SessionClosingScreen />` (loader full-screen) — texto "Wrapping up your conversation…" + spinner + skeleton del summary. Timeout 8s → mostrar opción "View partial summary".
+- [x] **3.7.8** ✅ Conversación libre con focus mode: tap mic → ver fade parcial → recibir respuesta IA → ver focus completo. Decir "see you later" → IA cierra. Decir "And I said goodbye to him" → IA NO cierra. Tapear End → ver loader.
 
 ## Fase 3.5 — Pronunciation Score
 
@@ -139,29 +139,49 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 4 — Persistencia de sesiones
 
-- [ ] **4.1** 🗄️ Store Zustand `useSessionStore`: crea sesión al primer turno, mantiene `session_id`, idioma, modo (`free` por ahora).
-- [ ] **4.2** 🗄️ Función `persistTurn(session_id, speaker, text)` que escribe a `session_turns`. Llamarla después de cada STT (user) y cada respuesta LLM (ai).
-- [ ] **4.3** 🎨 Botón "End session" en Home (visible solo si hay sesión activa). Marca `sessions.ended_at`.
-- [ ] **4.4** ✅ Hablar 2-3 turnos, cerrar sesión, verificar filas en Supabase (`sessions`, `session_turns`).
+- [x] **4.1** 🗄️ Store Zustand `useSessionStore`: crea sesión al primer turno, mantiene `session_id`, idioma, modo (`free` por ahora).
+- [x] **4.2** 🗄️ Función `persistTurn(session_id, speaker, text)` que escribe a `session_turns`. Llamarla después de cada STT (user) y cada respuesta LLM (ai).
+- [x] **4.3** 🎨 Botón "End session" en Home (visible solo si hay sesión activa). Marca `sessions.ended_at`.
+- [x] **4.4** ✅ Hablar 2-3 turnos, cerrar sesión, verificar filas en Supabase (`sessions`, `session_turns`).
 
 ## Fase 5 — Feedback core (pipeline + UI básica)
 
-- [ ] **5.0** 🧠 Edge Function `analyze-turn` (Deno, async per-turn): recibe `{turn_id, prev_turns[]}`, llama DeepSeek V4 Flash, escribe annotations parciales en `feedback_annotations`. Disparada fire-and-forget desde `chat-turn` después de cada turno del usuario. Pre-computa el feedback durante la sesión para bajar latencia del cierre.
-- [ ] **5.0b** 🧠 Setup de LanguageTool: decidir self-host (Docker) vs cloud free tier. Crear wrapper en `src/lib/languagetool.ts` para llamadas desde Edge Function. Solo EN + DE por ahora.
-- [ ] **5.1** 🧠 Edge Function `generate-feedback` (Deno, asíncrona): recibe `session_id`, lee turnos + annotations pre-computadas. **Paralelo:** llama DeepSeek V4 Pro para análisis cross-turn Y LanguageTool para validación sintáctica. Merge con dedupe (LLM gana en colisiones de span). Ver [FEEDBACK.md](FEEDBACK.md) + [MODELS.md](MODELS.md).
-- [ ] **5.2** 🧠 Validador JSON con **2 reintentos**: retry 1 con prompt más estricto; retry 2 con prompt mínimo de campos obligatorios. Si ambos fallan, setear `feedback_status = 'failed'`.
-- [ ] **5.3** 🎨 Estado de error de feedback: cuando `feedback_status = 'failed'`, mostrar popup en la app con opción de completar campos manualmente (HITL) o descartar.
-- [ ] **5.4** 🗄️ Persistir resultados de `generate-feedback`: `feedback_annotations` + upsert a `tracked_items` (acumular `weight`, actualizar `last_seen_session`) + setear `sessions.summary` y `sessions.tags`.
-- [ ] **5.5** 🎨 Pantalla `FeedbackScreen` con header (título + tags + contadores 🔴🟡🔵) y body scrolleable de turnos como `<GlassCard />` estilo chat.
-- [ ] **5.6** 🎨 Componente `<AnnotatedText />` que renderiza spans con fondo/underline rojo / amarillo / azul según severidad.
-- [ ] **5.7** 🎨 Tap en span → tooltip preview con `explanation` + `suggestion` + botón "No era error" (rechazo). Al rechazar: actualizar `weight` y `user_rejections` en `tracked_items`.
-- [ ] **5.8** 🧠 Lógica de auto-archivado por rechazo: si `user_rejections >= 2` y `weight <= 0`, archivar el item automáticamente sin confirmación.
-- [ ] **5.9** 🎨 Trigger: al pulsar "End session" → loader → navegar a `FeedbackScreen` cuando la Edge Function responde.
+- [ ] **5.0** 🧠 *(diferido a Fase 5 v2)* Edge Function `analyze-turn` per-turn: pre-computa anotaciones durante la sesión para reducir latencia al cierre.
+- [ ] **5.0b** 🧠 *(diferido)* LanguageTool: self-host vs cloud free tier. Añade cobertura de edge cases sintácticos. Implementar cuando el loop base funcione.
+- [x] **5.1** 🧠 Edge Function `generate-feedback` (LLM-only, sin LanguageTool): recibe `session_id`, lee turnos, llama LLM con prompt estructurado, devuelve JSON de feedback. Matching de turnos por texto (robusto ante omisiones del LLM).
+- [x] **5.2** 🧠 Validador JSON con **2 reintentos**: retry 1 instrucción de formato; retry 2 prompt mínimo. Si fallan → `feedback_status = 'failed'`.
+- [x] **5.3** 🎨 Estado de error: `Alert.alert` cuando `feedback_status = 'failed'` o falla la invocación. La sesión queda guardada.
+- [x] **5.4** 🗄️ Persistir: `feedback_annotations` (referencia a `turn_id`), upsert `tracked_items` (weight +0.2 si existe, cap 1.0), `sessions.summary` + `sessions.tags` + `feedback_status = 'done'`.
+- [x] **5.5** 🎨 Pantalla `FeedbackScreen`: header (título + tags + contadores 🔴🟡🔵) + body scrolleable de turnos glass-bubble. Reemplaza HorizontalNav (no es modal).
+- [x] **5.6** 🎨 Componente `AnnotatedText` inline en FeedbackScreen: spans con background + underline a color según severidad. Implementado con Text anidados (soporta onPress en RN).
+- [x] **5.7** 🎨 Tap en span → tooltip con explanation + suggestion + botón "Not an error". Al rechazar: weight -1, user_rejections +1, se elimina de la UI local.
+- [x] **5.8** 🧠 Auto-archivado: si `user_rejections >= 2` AND `weight <= 0` → `archived = true` en `tracked_items`.
+- [x] **5.9** 🎨 Trigger real: `handleSessionClosing` en App.tsx captura sessionId → llama `generate-feedback` → si done: `FeedbackScreen` | si failed/corta: `Alert`.
+  > ⚠️ **Pendiente de deploy:** ejecutar `supabase functions deploy generate-feedback` antes de probar.
 - [ ] **5.10** 🧠 Al generar feedback, detectar si el mismo `lemma` aparece en 3+ sesiones previas del usuario. Si sí, incluir en el output JSON un campo `pattern_insights[]`.
 - [ ] **5.11** 🎨 Si `pattern_insights` no vacío, mostrar tarjeta de Pattern Insight en la parte superior del `FeedbackScreen` con botón para abrir deep-dive directo.
 - [ ] **5.12** 🧠 En Edge Function `chat-turn`, detectar fuzzy-match de las expresiones del nudge (`tracked_items` con weight alto) en la respuesta IA. Incluir en respuesta `used_nudge_items[]`.
 - [ ] **5.13** 🗄️ Persistir `used_nudge_items` por sesión. Al cerrar, mostrar en FeedbackScreen: *"Expresiones practicadas hoy: 'run into' ✓"* con badge en el SRS.
 - [ ] **5.14** ✅ Sesión real → recibir feedback con colores → ver tooltip → rechazar span → verificar cambio de weight → ver Pattern Insight si aplica.
+
+### Fase 5.A — Fix de anotaciones + UX del FeedbackScreen (2026-06-21)
+
+> **Bug raíz encontrado:** `feedback_annotations` quedaba SIEMPRE vacía (spans/tooltips/rechazo no funcionaban) aunque `tracked_items` sí se poblaba. Dos causas: (1) el LLM devolvía offsets de caracteres `[start,end]` poco fiables + matching de turno por texto exacto que fallaba; (2) las anotaciones nunca se vinculaban a su `tracked_item_id`.
+
+- [x] **5.A.1** 🧠 Reescribir `generate-feedback` con modelo unificado: el LLM copia el substring del error **verbatim**; el span se calcula en código con `indexOf` (determinístico). Cada anotación con `track:true` hace upsert del `tracked_item` y vincula `tracked_item_id`. → arregla A1, A2, B1–B4, C1–C4, F2.
+- [x] **5.A.2** 🎨 **TITULO-FEEDBACK-TRUNCATION**: el título del header se trunca con `…`; tap → píldora expandida en z-index con el título completo; tap fuera → cierra.
+- [x] **5.A.3** 🎨 `SeverityDot` SVG (gradiente radial) reemplaza los emojis 🔴🟡🔵 en contadores y badge del tooltip — tono/forma consistentes iOS↔Android.
+- [x] **5.A.4** ✅ Verificado en sesión nueva: A1/A2/A3 (3 colores) ✓, B1/B2/B3/B4 (tooltip + "Not an error" solo en tracked) ✓. **Pendiente:** C1–C4 (rechazo → weight/user_rejections/archived en DB).
+
+### Fase 5.B — PARTIAL-SUMMARY-STREAMING (EDA / Realtime)
+
+> **Motivación:** hoy el flujo es síncrono — spinner bloqueante hasta que `generate-feedback` termina, y el botón "View partial summary" es vestigial (solo oculta el spinner; el feedback igual llega al resolver el await). La conversación YA está en DB, así que se puede mostrar al instante y pintar el análisis progresivamente. RN `fetch` no soporta streaming de tokens fiable → usar **Supabase Realtime** como bus de eventos.
+
+- [ ] **5.B.1** 🗄️ Habilitar Realtime (publication `supabase_realtime`) en `feedback_annotations` y `sessions`. Verificar que las políticas RLS permiten al usuario escuchar solo sus filas.
+- [ ] **5.B.2** 🧠 Reordenar el flujo en `App.tsx`/`HomeScreen`: al cerrar sesión válida, abrir `FeedbackScreen` **inmediatamente** (con la conversación ya persistida) en estado "analyzing…", e invocar `generate-feedback` en background (fire-and-forget) en vez de `await` bloqueante.
+- [ ] **5.B.3** 🎨 `FeedbackScreen` suscribe `postgres_changes`: INSERT en `feedback_annotations` (filtrado por los `turn_id` de la sesión) → pinta cada span al llegar; UPDATE en `sessions` → pinta `summary` + `tags` cuando se materializan. Shimmer sutil mientras `feedback_status != 'done'`.
+- [ ] **5.B.4** 🎨 Reemplazar "View partial summary" por el estado real de streaming (la pantalla ya es la "partial"); quitar el botón vestigial del `SessionClosingScreen` (o reducir el rol del spinner a un fade de transición < 1s).
+- [ ] **5.B.5** ✅ Cerrar sesión → ver la conversación al instante → ver spans/summary/tags aparecer progresivamente vía Realtime → estado final `done` sin recarga.
 
 ## Fase 6 — Deep-dive flotante
 
@@ -193,15 +213,73 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 
 ## Fase 9 — SRS de Phrasal Verbs / Tracked Items (EN-only)
 
-- [ ] **9.1** 🧠 Implementar algoritmo SM-2 (Anki simplificado) en `src/lib/srs.ts`. Función `nextReview(item, grade) → newSrsState`.
-- [ ] **9.2** 🗄️ Al persistir un `tracked_item` (Fase 5.4), inicializar `srs_state` con intervalo 1 día, ease 2.5.
-- [ ] **9.3** 🎨 Pantalla `SRSScreen` (swipe derecho desde Home + botón fallback): tab/toggle para SRS Phrasal Verbs y Shadow Reading. Mostrar solo `language='en'` para SRS.
-- [ ] **9.4** 🎨 Card SRS: muestra `text` + `explanation`, botón "Reveal", luego 4 botones (Again / Hard / Good / Easy) que llaman `nextReview`. Badge "✓ usado en sesión" si el item fue activado via nudge.
+- [x] **9.1** 🧠 Implementar algoritmo SM-2 (Anki simplificado) en `src/lib/srs.ts`. Función `nextReview(state, grade, now?) → SrsState` (pura, determinística). Mapeo Again/Hard/Good/Easy → quality 2/3/4/5; ease floor 1.3; Hard ×1.2, Easy ×1.3 bonus. Helpers `addDays`, `isDue`, `DEFAULT_SRS_STATE`. Validado: good×4 → 1/6/15/38d.
+- [x] **9.2** 🗄️ `srs_state` se inicializa via el DEFAULT de la migración 002 (`{interval:1, ease:2.5, repetitions:0, next_review:null}`) — el insert de `generate-feedback` no lo setea, y el update de items existentes no lo pisa (preserva progreso). Verificado en DB.
+- [x] **9.3** 🎨 Pantalla `SRSScreen`: header + tab toggle [Phrasal Verbs | Shadow Reading]; Shadow = placeholder (Fase 9.5). Loading + empty state ("all caught up") + session complete. Fetch de items no archivados + filtro `isDue` en cliente.
+  > ⚠️ **Deuda:** `tracked_items` no tiene columna `language`. MVP EN-only → se traen todos. Si se necesita filtrado estricto EN/DE: migración que agregue `language` a `tracked_items` + setearla en `generate-feedback` desde `session.language`.
+- [x] **9.4** 🎨 Card SRS: front "You said" (`text`) → Reveal → "Natural form" (`lemma`) + `explanation`; 4 botones Again/Hard/Good/Easy → `nextReview` → persiste `srs_state` + haptics + transición animada. Badge "✓ usado en sesión" **diferido a 9.8** (nudge aún no existe).
 - [ ] **9.5** 🧠 Lógica de graduación (Opción C): al calcular `nextReview`, verificar si `weight <= 0` AND `srs_state.interval >= 14`. Si sí, setear una flag `graduation_suggested = true` en el item. En la siguiente apertura del SRS, mostrar la sugerencia de archivar antes de la card.
 - [ ] **9.6** 🎨 Modal de graduación: *"Parece que ya dominas '[expresión]' — ¿archivarlo?"* con botones [Archivar] / [Seguir practicando]. Al archivar: `archived = true`, item pasa a sección "Graduados" consultable.
 - [ ] **9.7** 🧠 Modo "drill": Edge Function `generate-srs-drill` que toma N items y genera 3-5 mini-ejercicios de uso (cloze + producción libre).
 - [ ] **9.8** 🧠 **Nudge implícito**: helper `buildSystemPrompt(user_id, lang)` que inyecta top N tracked_items con weight alto como instrucción al LLM ("weave these naturally, do not mention"). Usar en Edge Function `chat-turn`.
 - [ ] **9.9** ✅ Cometer error → aparece como card SRS → repasar → en sesión siguiente la IA usa la expresión → badge ✓ en SRS → alcanzar criterio de graduación → ver sugerencia de archivado.
+
+### Fase 9.A — SRS UX polish (iteración de diseño, 2026-06-22)
+
+> Feedback de uso real sobre el SRS: texto ilegible (contraste), card sin liquid glass, botones de grado rotos (rojo-sobre-rojo + off-palette), sin onboarding del modo. Decisiones: TTS al revelar + glass con tinte sutil + estrategia de versionado estándar RN/Expo.
+
+- [x] **9.A.1** 🎨 Liquid glass real en la card (tier `frost` sobre el mesh blob) + `ScrollView` interno (arregla overflow de la `explanation`) + contraste de texto (`textSoft` ≥3:1 para secundarios).
+- [x] **9.A.2** 🎨 Botones de grado al palette de marca (Again=terracota, Hard=ámbar, Good=olivo, Easy=sage) con glass + tinte sutil + **texto crema legible** + dot de color + sub-label (Forgot / 1–2 days / On track / Knew it) + prompt "How well did you recall it?".
+- [x] **9.A.3** 🎨 Intro/Start screen (deck overview + "Start review") + botón ayuda (?) con **modal de guía** (Recall → Reveal → Rate). Resuelve "no sé qué hacer / no hay botón de comenzar".
+- [x] **9.A.4** 🧠 Botón 🔊 TTS al revelar: reproduce la `lemma` (forma natural) vía `speak()` + `expo-av`. (Decisión: SRS sigue siendo flashcards; la IA conversacional vive en Home, el listen&repeat en Shadow Reading 9.5.)
+
+### Fase 9.B — Flashback de contexto + Tracking de mini-sesiones + TTS cache (2026-06-25)
+
+> Tres mejoras que enriquecen el SRS antes de la graduación. Plan completo en el plan file de la sesión.
+> **Pendiente de deploy:** aplicar `006_srs_tracking.sql` en Supabase + regenerar tipos (`supabase gen types`).
+
+- [x] **9.B.1** 🗄️ Migración `006_srs_tracking.sql`: `srs_sessions` (agrupador liviano: id, user_id, started/ended) + `srs_reviews` (log por card: grade, used_tts, used_history, srs_state antes/después) + RLS (patrón 004) + vista `srs_session_stats` (agregados derivados, `security_invoker`).
+- [x] **9.B.2** 🧠 `src/services/srsSession.ts` (`startSrsSession` / `recordReview` / `endSrsSession`) + wiring en SRSScreen (Start abre sesión; cada grade loguea review con flags; back/tab/unmount/finish cierran).
+- [x] **9.B.3** 🎨🧠 Flashback: `src/services/srsContext.ts` (resolución annotation→turno + fallback indexOf, `fetchTurnWindow`, `baseWindow`) + modal con síntesis + ventana de 6 turnos (turno objetivo resaltado + span) + load-more ↑/↓ paginado + stepper de batch + "Load full" (≤60).
+- [x] **9.B.4** 🧠 `speakCached()` + cache persistente por lemma (hash djb2 en `cacheDirectory/tts_cache`) en `tts.ts`.
+- [x] **9.B.5** 🎨 Prefetch look-ahead (card actual + siguientes 2) + flags `usedTts`/`usedHistory` por card.
+- [ ] **9.B.6** ✅ E2E: flashback (item nuevo + legacy + conv larga con paginación), tracking (filas en `srs_sessions`/`srs_reviews`), TTS cache hit (~0 latencia).
+
+### Fase 9.C — SRS focus mode + bugfixes (2026-06-25)
+
+> Lote de bugs/UX tras testear 9.B en device. Plan completo en el plan file.
+
+- [x] **9.C.1** 🎨🧠 **Modo enfoque reusable**: `src/stores/useFocusStore.ts` (zustand, `acquire/release` por owner) + `src/components/EdgeFocusOverlay.tsx` (vignette SVG con gradiente, opacidad animada). `HorizontalNav` bloquea swipe (`!swipeLocked`); Home adquiere/libera según `focusLevel`; SRS adquiere en Start, libera en finish/back/End/unmount.
+- [x] **9.C.2** 🎨 Botón **"End session"** explícito en la vista de cards → `finishSrsSession` + `fetchQueue` + libera foco.
+- [x] **9.C.3** 🧠 **Fix audio mudo**: `Audio.setAudioModeAsync({ playsInSilentModeIOS: true })` antes de reproducir en SRS (Home lo seteaba al grabar; SRS nunca graba) + logs en `handleSpeak` y `tts.speakCached`.
+- [x] **9.C.4** 🎨 **Fix layout de modales** (causa: `GlassCard content flex:1` colapsa): guía con `noPadding` + View interno con padding (aparece al instante); flashback con `ScrollView maxHeight` → scroll vertical real + stepper visible.
+- [x] **9.C.5** 🎨 **Contraste del span**: burbuja objetivo neutra + borde accent; span con relleno sólido accent + texto crema bold (salta a la vista).
+- [x] **9.C.6** 🧠 **Filtro de basura** en `generate-feedback` (descarta spans <2 chars / letras sueltas, ej. "U") + refuerzo del prompt + filtro client-side en `fetchQueue`.
+- [x] **9.C.7** 🎨 **Cap del mazo = 15** cards/sesión (`DECK_CAP`); resuelve "nunca las acabo" + card fantasma.
+- [x] **9.C.8** 🧠 **Cache de flashback** por sesión (`Map` ref, se limpia al cerrar) → reabrir el mismo item no re-consulta la DB.
+- [ ] **9.C.9** ✅ E2E: swipe bloqueado + vignette en SRS y conversación; audio suena en silencio; modales OK; span legible; sin basura/fantasma; cache de flashback sin re-query.
+  > ⚠️ **Re-deploy** `generate-feedback` tras el filtro de basura.
+
+### Fase 9.D — Pulido de enfoque + UX de card (2026-06-25)
+
+> Segunda ronda de feedback de device sobre 9.C.
+
+- [x] **9.D.1** 🎨 Reestructurar modales (guía + flashback) con **backdrop `Pressable` separado** (no envolver el card en `TouchableOpacity`) → el `ScrollView` del historial **scrollea vertical** + sin leak del gesto de swipe.
+- [x] **9.D.2** 🎨 Back button **deshabilitado y atenuado** (opacity 0.3) durante el enfoque → no se puede salir libremente; la salida es el botón End session.
+- [x] **9.D.3** 🎨 Botón **"End session"** con label completo (antes mostraba solo "End" + label oculto en accessibility).
+- [x] **9.D.4** 🎨 **Scale 0.92** de la vista SRS en modo enfoque (centrada) → el vignette de bordes no choca con card/tabs/botones. Solo en SRS (Home no lo necesita).
+- [x] **9.D.5** 🎨 **Rediseño de card**: muestra de entrada la forma errónea (de-enfatizada, tachada) + **forma natural protagonista** + audio + explicación. El botón "Rate this card" solo revela los 4 grados (ya no oculta la respuesta). Copy de intro/guía actualizado.
+
+## Fase 14.5 — Hardening de dependencias y reproducibilidad de build
+
+> **Contexto:** preocupación por roturas al actualizar RN/Expo/librerías. Docker NO resuelve esto (las apps RN compilan a binario nativo, no corren en contenedor; Expo fija versiones por SDK). Estrategia estándar RN/Expo:
+
+- [ ] **14.5.1** 📦 Pin del Expo SDK + `package-lock.json` commiteado (lockfile como fuente de verdad de versiones). Documentar la versión exacta de SDK soportada en el README.
+- [ ] **14.5.2** 📦 `expo-doctor` en CI (GitHub Action) que falla el build si hay versiones incompatibles con el SDK activo.
+- [ ] **14.5.3** 📦 EAS Build con perfiles fijados (`eas.json`) para builds reproducibles (mismo toolchain nativo en cada build).
+- [ ] **14.5.4** 📦 Renovate/Dependabot con auto-merge solo de patches + PRs agrupadas para minors/majors → updates controlados y revisables, nunca masivos.
+- [ ] **14.5.5** 🧠 *(opcional)* Snapshot "known-good": tag de git + lockfile congelado antes de cada upgrade de SDK, para rollback inmediato si algo se rompe.
+  > Docker queda fuera de scope para libs nativas; si en el futuro se quiere reproducir el entorno de **CI** (node + tooling), un Dockerfile de CI es válido pero es ortogonal a este blindaje.
 
 ## Fase 9.5 — Shadow Reading Mode
 
@@ -211,6 +289,27 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **9.5.4** 🎨 Resultado visual: barra de progreso de precisión, velocidad en WPM, comentario de naturalidad. Botón "Siguiente frase".
 - [ ] **9.5.5** 🗄️ Persistir resultados de shadow reading por sesión (tabla `shadow_sessions` o campo en `sessions`).
 - [ ] **9.5.6** ✅ Escuchar frase → repetir → ver score de precisión + WPM + feedback. Probar con frase fácil y frase difícil.
+
+## Fase 9.7 — Guided Practice + Vocabulary Catalog
+
+- [ ] **9.7.1** 🗄️ Aplicar migración 006 en Supabase: tablas `b2_expressions_corpus`, `user_corpus_exposure`, `vocabulary_catalog`, `vocabulary_definitions_cache` + ALTER `sessions.mode` y `session_turns` (chips_offered, chips_used, constraint_status). Verificar RLS de cada objeto.
+- [ ] **9.7.2** 🗄️ Data migration 006b: seed de ~150 expresiones en `b2_expressions_corpus` (phrasal verbs + conjunciones + colocaciones de Oxford Learner's / Cambridge English). Script SQL curado, aplicar como migración independiente.
+- [ ] **9.7.3** 🧠 Edge Function `guided-chips` (Deno): recibe `{session_id, turn_id, focus: 'srs'|'b2'|'mixed'}`, consulta `tracked_items` del usuario + `b2_expressions_corpus` filtrado por tags, llama DeepSeek V4 Flash, devuelve `{should_emit_chips, chips[{expression,source,hint_short,hint_example}]}`. Guard clause: no emitir en los primeros 2 turnos.
+- [ ] **9.7.4** 🧠 Fuzzy match client-side en `src/lib/guidedChips.ts`: Levenshtein normalizado por lemma (threshold ≥ 0.8). Función `detectChipUsage(userText, chips[]) → {matched[], constraint_status}`. Tests unitarios con casos edge ("shown up" → "show up", "fell behind" → "fall behind").
+- [ ] **9.7.5** 🎨 Componente `<ModePicker />` en `HomeScreen`: pill selector `[Free] [Roleplay] [🎯 Guided]`. Persiste en `useSessionStore.selectedMode`. Sub-label dinámico del botón principal según modo activo.
+- [ ] **9.7.6** 🎨 Bottom-sheet `<GuidedConfigSheet />`: foco `[Mis errores] [Vocabulario B2] [Mixto]` + duración `[5 min] [10 min]`. Aparece una sola vez antes del primer turno de una sesión Guided. Guarda en `useSessionStore.guidedConfig`.
+- [ ] **9.7.7** 🎨 Componente `<GuidedChips />`: 4 pills con stagger animation (Reanimated, 80ms entre chips, fade-in + translateY 12→0, out-expo). Badge superior por `source` (🎯/✨/🌱). Tap corto → tooltip `hint_short`. Tap largo → modal con `hint_example` + speaker TTS.
+- [ ] **9.7.8** 🧠 Integración chip flow: en cada turno IA dentro de `mode=guided`, llamar `guided-chips` en paralelo. Si `should_emit_chips=true`, renderizar `<GuidedChips />`. Post-STT: correr `detectChipUsage`, actualizar `chips_offered`/`chips_used`/`constraint_status` en `session_turns`.
+- [ ] **9.7.9** 🧠 Re-prompt suave: si `constraint_status='skipped'`, añadir al siguiente system prompt la frase de invitación ("Nice — could you try using one of these?"). Re-destacar los chips originales en UI sin nueva llamada a `guided-chips`.
+- [ ] **9.7.10** 🧠 Cooldown de chips: en `useSessionStore`, trackear contador de turnos consecutivos `skipped`. Si ≥ 2, activar `chipsCooldown = 2` (decrementar por turno). Durante cooldown no llamar a `guided-chips`.
+- [ ] **9.7.11** 🎨 Pantalla `VocabularyHubScreen` (reemplaza el slot de swipe izquierdo): header con contador + tab bar `[📚 Catálogo] [🔁 En práctica]`. Actualizar `PagerView` en navegación principal.
+- [ ] **9.7.12** 🎨 Tab [📚 Catálogo]: search bar + filtros por categoría (All / Phrasal / Words / Idioms) + nivel CEFR. `FlatList` virtualizada de cards con expression, nivel, definición corta, badges de origen/estado. Swipe izq en card → `hidden = true`.
+- [ ] **9.7.13** 🎨 Drawer de detalle del catálogo: definición, ejemplos, sesiones relacionadas, campo `user_note` editable inline, botón "Open deep-dive". Reutiliza `<GlassCard />` y el pipeline de deep-dive existente.
+- [ ] **9.7.14** 🗄️ Sección "New for your catalog" en `FeedbackScreen`: lista de ≤5 candidatos B2+ generados por `generate-feedback` (palabras que la IA usó, no en catálogo del usuario). Checkboxes + botón "Agregar seleccionadas". INSERT en `vocabulary_catalog` con `source='post_session_suggestion'`.
+- [ ] **9.7.15** 🎨 Sección "Guided Practice Summary" al tope del `FeedbackScreen` (solo `session.mode='guided'`): chips ofrecidos, usados, % usage rate + lista de expresiones con ✓/⚠.
+- [ ] **9.7.16** 🧠 Lógica de graduación `promoted_from_tracked`: cuando `tracked_item.weight ≤ 0` AND `srs_state.interval ≥ 14`, mostrar CTA "→ Agregar al catálogo" en tab [🔁 En práctica]. Al aceptar: INSERT en `vocabulary_catalog` con `source='promoted_from_tracked'`, marcar `archived=true`, llamar LLM para `definition`+`example` si no hay caché en `vocabulary_definitions_cache`.
+- [ ] **9.7.17** 🗄️ KPIs del modo Guided: calcular `chip_offer_rate`, `chip_usage_rate`, `new_expressions_practiced` al cerrar sesión en `generate-feedback` y persistir (columna en `sessions` o tabla auxiliar). Exponer en `StatsScreen` (Fase 13.5).
+- [ ] **9.7.18** ✅ E2E sesión guiada: seleccionar Guided → config foco → conversar 5+ turnos → ver chips aparecer con stagger → usar al menos 2 → cerrar → ver "Guided Practice Summary" + "New for your catalog" → aceptar 1 entrada → verificar en tab [📚 Catálogo]. Verificar que Roleplay desde modo selector del Home sigue funcionando.
 
 ## Fase 10 — RAG / Memoria a largo plazo
 
@@ -266,11 +365,127 @@ Lista cronológica y atómica de minitareas para llevar el proyecto de specs →
 - [ ] **14.5** 📦 Licencia (MIT o similar) + `CONTRIBUTING.md` mínimo. Preparar para hacer público el repo.
 - [ ] **14.6** ✅ Onboarding cero: clonar el repo en máquina limpia, seguir el README, llegar a app corriendo. Iterar hasta que funcione.
 
+## Fase 15 — Knowledge Vault (baúl de conocimiento)
+
+> Feature futura (las últimas a implementar). Spec completa en [KNOWLEDGE_VAULT.md](KNOWLEDGE_VAULT.md).
+> La app como base de conocimiento personal: conversaciones persistentes, reanudables por voz, organizadas
+> por tags. **El schema ya lo soporta** (`sessions.tags[]` + `summary` + `session_turns`) → no requiere
+> tablas nuevas, es UI + ajustes de lógica. El flashback SRS (Fase 9.B) es el primer paso concreto.
+
+- [ ] **15.1** 🧠 Fix `chat-turn`: traer los **últimos N** turnos (hoy trae los primeros con `order asc + limit`). Imprescindible para reanudar conversaciones largas con contexto reciente.
+- [ ] **15.2** 🎨 Pantalla `VaultScreen`: carpetas = `sessions.tags[]` → lista de conversaciones por tag. UI estilo chat de IA (carpetas → conversaciones).
+- [ ] **15.3** 🧠🎨 Reabrir y **continuar una conversación por voz**: setear la sesión activa en `useSessionStore`, continuar insertando turnos desde el último `idx`, IA rehidratada.
+- [ ] **15.4** 🧠 Summary evolutivo: al reabrir y agregar turnos, re-generar/extender `sessions.summary` (reusar pipeline de feedback o función `update-summary` liviana).
+- [ ] **15.5** 🎨 Búsqueda por tag + texto (sobre `summary` / turnos).
+- [ ] **15.6** 🧠 Cross-link con Obsidian export (Fase 12): disparar export desde el detalle de una conversación del baúl.
+- [ ] **15.7** ✅ E2E: hablar sobre un tema → cerrar → reabrir al día siguiente desde el baúl → continuar la conversación por voz con la IA recordando el contexto.
+
+---
+
+## Fase UI.A — Design System Audit (post-iteración Figma 2026-06-21)
+
+> Backlog generado a partir de auditoría senior cruzando código actual (`src/theme/index.ts`, `GlassCard`, `HomeScreen`, `FeedbackScreen`, `HorizontalNav`), [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) y 4 frames canónicos de Figma (nodes 7:2, 53:325, 58:783, 63:1546, 65:1774).
+>
+> **Reglas de orden:** estas tareas NO son una fase secuencial estricta — son hardening transversal. Insertarlas en la fase activa cuando toquen su área (ej. UI.A.G.* al hacer Fase 9.7, UI.A.D.* al revisar contraste antes de Fase 14.2). Marcadas con prefijo `UI.A.` para no romper la numeración existente.
+
+### A · Resync Figma ↔ Spec ↔ Código (decisiones de diseño)
+
+- [x] **UI.A.1** 🎨 ~~Decidir familia tipográfica del **logo "LanguAI"**~~ → **DECISIÓN 2026-06-21**: **Plus Jakarta Sans ExtraLight 200, 36px**. Actualizar Figma (frames 58:817, 65:1788) y confirmar que `DESIGN_SYSTEM.md § 3` + `theme/index.ts` ya usen este valor.
+- [x] **UI.A.2** 🎨 ~~Decidir familia del **streak chip**~~ → **DECISIÓN 2026-06-21**: **Bricolage Grotesque reemplaza a Geist** en el streak chip. No instalar `@expo-google-fonts/geist`. Actualizar Figma (frames 53:355, 65:1820) para eliminar Geist y usar Bricolage Grotesque SemiBold con el gradiente olive→gris existente.
+- [ ] **UI.A.3** 🎨 Decidir si **Bricolage Grotesque ExtraLight 200** entra al sistema (Figma lo usa en scenario card de Roleplay y placeholder de YouTube). Hoy solo Light 300 y Regular 400 están cargados. Si entra: agregar token nuevo (ej. `bodyExtraLight`) + cargar peso 200 en `App.tsx`.
+- [ ] **UI.A.4** 🎨 Actualizar Figma para eliminar el **borde lima `rgba(225,243,125,0.1)`** de las cards de historial (frame 63:1546, vars `fill_12d6ed7e`). DESIGN_SYSTEM § 8 ya lo marca como anti-pattern pero el archivo de Figma no fue resincronizado.
+- [ ] **UI.A.5** 🎨 Actualizar Figma del Home (frame 53:325): hay **3 squircles apilados** (53:332/333/334) replicando el mic con `el efecto`. Viola "nunca el mismo tier apilado" del § 4. Quedarse con 1 squircle + sonar ring.
+- [ ] **UI.A.6** 🎨 Resync **YouTube pill**: Figma frame 65:1837 usa `borderRadius: 32px` + text Bricolage ExtraLight 200 16px; código usa `borderRadius: 20px` + Darker Grotesque 400 13px. Definir cuál es la verdad y alinear.
+- [x] **UI.A.7** 🎨 ~~Agregar tier `medium`~~ → **HECHO 2026-06-21**: tier `medium` añadido a `theme/index.ts → glass.medium` (fill 0.56, border 0.74, blur 30/38), soportado por `GlassCard` (`tier` ahora es `GlassTier`) y documentado en `DESIGN_SYSTEM.md § 4`. Aplicación a la scenario card real queda pendiente para cuando se construya Roleplay (hoy es placeholder).
+- [ ] **UI.A.8** 🎨 Generar **mockups dark mode** en Figma para los 4 frames clave (todos están en light `#FFFFFF` o gris `#DADADA`). Sin mockup dark, "Light mode parity audit" (13.6) no es verificable bidireccionalmente.
+- [ ] **UI.A.9** 🎨 Revisar frame 58:783 (mockup viejo con fill `#DADADA` + texto `#000` puro + Plus Jakarta Sans 14). Verificar si es Login/Onboarding deprecado y eliminarlo o actualizarlo a paleta vigente.
+
+### B · Glassmorphism (consolidación técnica)
+
+- [x] **UI.A.10** 🎨 ~~Unificar dos implementaciones de glass~~ → **HECHO 2026-06-21**: sistema único en `theme/index.ts` (`glass` per-mode + `resolveGlass(tier, isDark)`). `GlassLayers` inline extraído a componente reusable `src/components/GlassFill.tsx` (capas absolutas sin children); `GlassCard` (contenedor con children) ahora lee del mismo resolver. Cero magic numbers de blur duplicados. Tiers: ghost/soft/medium/strong/**frost** (el look translúcido del header/mic/YT que antes era `GlassLayers`).
+- [x] **UI.A.11** 🎨 ~~Implementar "el efecto" liquid glass~~ → **HECHO 2026-06-21**: prop `elevated` en `GlassCard` + preset `glassElevation` en theme. RN no soporta `box-shadow: inset`, así que se aproxima con drop shadow exterior + highlight de borde superior (`topHighlight`). No requirió `react-native-shadow-2`. Pendiente: aplicar `elevated` a las cards/mic que lo ameriten cuando se rediseñe cada pantalla.
+- [x] **UI.A.12** 🎨 ~~Hacer surfaces theme-aware~~ → **HECHO 2026-06-21**: en dark, los tokens FLAT `surface`/`surfaceSoft` bajaron de `white 0.47` a `white 0.10` (y `surfaceStrong` a 0.16, `surfaceGhost` a 0.04). Antes los chips/botones de modal (flat, sin blur) quedaban casi blancos con texto crema encima → ilegibles. Light mode sin cambios. Nota: los **fills de los tiers glass** (con BlurView detrás) siguen white-derived por diseño (§ 4).
+- [~] **UI.A.13** 🧠 **PARCIAL 2026-06-21**: `experimentalBlurMethod="dimezisBlurView"` añadido en Android tanto a `GlassCard` como a `GlassFill`. **Falta medir FPS real** en dispositivo/emulador Android low-end (no hay device en esta sesión) — dejar abierto hasta validar ≥55fps con 6+ BlurView simultáneos en Home.
+- [x] **UI.A.14** 🎨 ~~Fallback de glass en Android~~ → **HECHO 2026-06-21**: `dimezisBlurView` habilita blur real en Android; cuando el blur no rinde, el `fill` del tier sostiene la legibilidad. `surfaceGhost` subido a 0.04 para no desaparecer sin blur. Documentado en `GlassFill.tsx` y `DESIGN_SYSTEM § 4`.
+
+### C · Tipografía (token discipline)
+
+- [ ] **UI.A.15** 🎨 Auditar `HomeScreen.tsx`: hay **hardcoded font sizes** (11, 12, 13, 14, 15, 18) fuera del sistema de 6 tokens (`display 48`, `logo 36`, `nav 24`, `body 20`, `caption 16`, `fine 16`). Migrar a tokens o agregar tokens nuevos justificados en DESIGN_SYSTEM § 3.
+- [ ] **UI.A.16** 🎨 Mismo audit para `FeedbackScreen` (fontSize 10, 11, 12, 13, 15) y `SessionClosingScreen` / `OnboardingScreen`. Generar tabla de "tokens vs hardcoded" como output del audit.
+- [ ] **UI.A.17** 🎨 Aplicar regla **`caption.opacity = 0.75`** consistentemente: hoy el token lo define pero los componentes no lo aplican (queda en 100%). Centralizar en un componente `<Caption />` o en `<ThemedText variant="caption" />`.
+
+### D · Accesibilidad (CRITICAL — bloqueante para v1.0)
+
+- [ ] **UI.A.18** 🎨 Agregar `accessibilityLabel` + `accessibilityRole="button"` a TODOS los `TouchableOpacity` sin texto visible: mic button (Home), header buttons (settings, streak, theme toggle, back), modal close, chips de lang/level, rejection button, "Extraer" YT, back en FeedbackScreen.
+- [ ] **UI.A.19** 🎨 Auditar contraste WCAG 4.5:1 en todos los pares:
+  - `text #F0EDE6` sobre `background #0C0D0B` (esperado: ✅)
+  - `text` sobre `surfaceSoft` (sospecha: ❌)
+  - `textMuted` sobre `background` (sospecha: ✅ pero borderline)
+  - `caption opacity 0.75 × textMuted 0.5 = 0.375 efectivo` (sospecha: ❌)
+  - `danger` y `accent` sobre `background`
+  Generar reporte con APCA o WCAG-AA y ajustar tokens.
+- [~] **UI.A.20** 🎨 Implementar soporte de **`AccessibilityInfo.isReduceMotionEnabled()`**: sonar ring (HomeScreen), breath loop (mic scale), mount fades, FadeInUp/FadeOutDown del End button → todos deben pausarse o reducirse cuando el sistema lo pide. **PARCIAL 2026-06-22**: el drift del `MeshBackground` ya respeta reduce-motion vía `useReducedMotion()` (las membranas ElasticSVG fueron eliminadas, ver bloque K). Falta el resto de animaciones del Home.
+- [ ] **UI.A.21** 🎨 Reemplazar emojis severidad `🔴🟡🔵` por **íconos SVG semánticos** + label de texto en `FeedbackScreen` counters y badges. Mantener color como refuerzo, no como único indicador (regla `color-not-only`).
+- [ ] **UI.A.22** 🎨 Implementar **focus trap + escape route** en modales (Discard, Lang picker, Annotation tooltip): cerrar con Esc en web, con back-button hardware en Android, con swipe-down en iOS. Hoy solo cierran tapeando overlay.
+- [ ] **UI.A.23** 🎨 Soportar **Dynamic Type / Text Scale**: el sistema tipográfico tiene `fontSize` fijos. Cuando el usuario aumenta tamaño de fuente del SO, hay riesgo de truncado en headers y chips. Probar con escala iOS 200% y Android 1.3x; agregar `allowFontScaling` policy explícita por token.
+
+### E · Web compatibility (decisión estratégica)
+
+- [x] **UI.A.24** 📦 ~~Decidir alcance web~~ → **DECISIÓN 2026-06-21**: **Solo app móvil nativa**. No se soporta `react-native-web` ni PWA. Bloque UI.A.25–UI.A.32 queda archivado. Documentar en `CLAUDE.md` como decisión no negociable para evitar regresiones futuras.
+- [~] **UI.A.25** ~~📦 (web) Configurar `react-native-web`~~ → **ARCHIVADA** (decisión UI.A.24: solo mobile).
+- [~] **UI.A.26** ~~🎨 (web) Breakpoints responsive~~ → **ARCHIVADA**.
+- [~] **UI.A.27** ~~🎨 (web) Hover states~~ → **ARCHIVADA**.
+- [~] **UI.A.28** ~~🎨 (web) Keyboard navigation~~ → **ARCHIVADA**.
+- [~] **UI.A.29** ~~🎨 (web) BlurView fallback Firefox/Safari~~ → **ARCHIVADA**.
+- [~] **UI.A.30** ~~🎨 (web) Viewport meta~~ → **ARCHIVADA**.
+- [~] **UI.A.31** ~~🎨 (web) Conflicto swipe HorizontalNav~~ → **ARCHIVADA**.
+- [~] **UI.A.32** ~~🎨 (web) SafeAreaView en web~~ → **ARCHIVADA**.
+
+### F · Touch targets & inputs
+
+- [ ] **UI.A.33** 🎨 Auditar todos los hit targets <44pt y expandir con `hitSlop` o padding:
+  - YouTube "Extraer" button (paddingVertical 6 → ~28pt total). Subir a 12.
+  - Modal chips (paddingVertical 9 → ~36pt). Subir a 13 o aumentar fontSize.
+  - Severity badges en feedback tooltip.
+- [ ] **UI.A.34** 🎨 Validación inline en YouTube `TextInput`: detectar URL inválida y mostrar microcopy bajo el input (regla `inline-validation` + `error-clarity`). Hoy un URL malformado no avisa.
+- [ ] **UI.A.35** 🎨 Modal Discard: usar `animationType="slide"` + drag handle visible (3px × 36px gray bar centrada arriba del sheet) para coherencia con expectativa nativa iOS. Hoy es `"fade"` y sin handle.
+
+### G · Loading & empty states
+
+- [ ] **UI.A.36** 🎨 Reemplazar `ActivityIndicator` en `FeedbackScreen` (loading >1s) por **skeleton screen** (3 burbujas grises shimmer + header skeleton).
+- [ ] **UI.A.37** 🎨 Mismo skeleton pattern para `SessionClosingScreen` — el spinner solo es válido <300ms.
+- [ ] **UI.A.38** 🎨 Agregar **empty state HomeScreen first-time user**: hint "Tap the mic to start your first conversation" + arrow apuntando al mic. Esconderse después de la primera sesión.
+- [ ] **UI.A.39** 🎨 Empty state planificado para `VocabularyHubScreen` (Fase 9.7.11) y `HistoryScreen` (Fase 8.1) — diseñar antes de implementar, no después.
+
+### H · Icon consistency
+
+- [ ] **UI.A.40** 🎨 Unificar **fill vs outline** en iconos del mic: hoy `mic` y `stop` son filled, `hourglass-outline` y `radio-outline` son outline. Decidir un estilo único (probablemente outline para coherencia con header `arrow-back`, `settings-outline`, `moon-outline`).
+- [ ] **UI.A.41** 🎨 Documentar **icon set canónico** en DESIGN_SYSTEM.md (§ nueva): Ionicons outline + stroke width 1.5 + sizes 18/22/24 + alignment baseline. Hoy no hay regla escrita.
+
+### I · Performance & rendering
+
+- [ ] **UI.A.42** 🧠 Auditar **mount cost de HorizontalNav**: las 3 pantallas (Roleplay, Home, SRS) montan side-by-side. Sonar loop + breath loop corren en pantallas offscreen → CPU/GPU desperdiciado. Pausar animaciones cuando `currentPage !== index`. **Nota 2026-06-22**: el fondo dejó de ser per-pantalla — ahora es un único `MeshBackground` GPU-compuesto a nivel de App (un solo view en vez de blob SVG + 2 ElasticSVG por página, ver bloque K). Reduce parte del costo offscreen.
+- [ ] **UI.A.43** 🧠 `FeedbackScreen` usa `ScrollView` para turnos. Sesiones >40 turnos producirán memory pressure. Migrar a `FlatList` con `removeClippedSubviews` antes de Fase 13.
+- [ ] **UI.A.44** 🧠 Auditar **re-render del Home** en cada cambio de `voiceStatus`: el componente raíz se re-renderiza completo (incluye todos los hijos). Memoizar `GlassLayers`, `HeaderBtnBorder` con `React.memo`.
+
+### J · Documentación cruzada
+
+- [ ] **UI.A.45** 📦 Crear `crafting/UI_AUDIT_2026-06.md` con: tabla "Figma node ↔ código path ↔ spec sección", lista de divergencias, snapshot de tokens vigentes vs aplicados. Sirve como baseline para futuras auditorías y referencia para Gemini al generar nuevas pantallas.
+- [ ] **UI.A.46** 📦 Actualizar `DESIGN_SYSTEM.md § 8` (tabla de anti-patterns) con los hallazgos nuevos: dos implementaciones de glass, hardcoded font sizes, mix fill/outline icons, emoji severidad load-bearing, `surfaceSoft` no theme-aware.
+
+### K · Fondo Mesh Gradient (reemplaza blob SVG + ElasticSVG)
+
+- [x] **UI.A.47** 🎨 ~~Evaluar `expo-mesh-gradient` como reemplazo del fondo~~ → **HECHO 2026-06-22**: spike (`MeshGradientSpike`, descartado) validó en device los 3 tests — ambiental sin costura, drag siguiendo el dedo, ≥55fps en UI thread. Confirmado soporte iOS+Android en SDK 54 (v0.4.8, mín iOS 16.4).
+- [x] **UI.A.48** 🎨 ~~Crear `MeshBackground`~~ → **HECHO 2026-06-22**: componente único GPU-compuesto (`src/components/MeshBackground.tsx`), grid 3×3, paletas theme-aware en `theme/index.ts → meshGradient`, drift ambiental con reduce-motion. Montado una vez a nivel de `App`. Elimina la **costura rectangular** del blur SVG del blob.
+- [x] **UI.A.49** 🎨 ~~Reacción al swipe~~ → **HECHO 2026-06-22**: `HorizontalNav` escribe `meshSwipeX`/`meshTouchY` (shared values) en sus worklets; `MeshBackground` los lee y se inclina hacia el drag. El `withSpring(0)` del snap devuelve la inclinación a 0 de forma continua. Reemplaza el feedback de borde de las membranas.
+- [x] **UI.A.50** 🎨 ~~Eliminar `BackgroundBlob` + `ElasticSVG`~~ → **HECHO 2026-06-22**: ambos componentes borrados, sus referencias limpiadas, `blob` config retirado de theme. `ELASTIC_UI.md` marcado SUPERSEDED; `DESIGN_SYSTEM § 6` reescrito a "Fondo — Mesh Gradient".
+- [ ] **UI.A.51** 🎨 Afinar paletas del mesh (`meshGradient.dark`/`.light`) en device y validar que el contraste del texto/glass encima siga legible (las esquinas deben mantenerse cerca de `background`). Arranca con los valores del spike.
+
 ---
 
 ## Notas de ejecución
 
 - **Tasks atómicas pero no microscópicas**: cada una debería caber en 1-3 mensajes de iteración. Si una tarea crece, se subdivide al momento.
 - **Verificaciones ✅** son no negociables — no avanzar a la próxima fase con la verificación de la actual fallando.
-- **Costos de IA**: monitorear desde Fase 5 en adelante. Referencia de estimaciones en [COSTS.md](COSTS.md). Si OpenCode Go llega a saturarse, activar el plan fallback cambiando `LLM_ENDPOINT` y `LLM_MODEL` en las Edge Functions.
+- **Costos de IA**: monitorear desde Fase 5 en adelante. Referencia de estimaciones en [COSTS.md](COSTS.md). Si OpenCode Go llega a saturarse, activar el plan fallback cambiando `OPENCODE_BASE_URL` (alias: `LLM_ENDPOINT`) y `LLM_MODEL` en las Edge Functions.
 - **Multi-idioma extendido**, **modo "continuar roleplay"**, **conversation starters inteligentes** → defer a v2. Costo de ingeniería de nuevo idioma documentado en [ARCHITECTURE.md](ARCHITECTURE.md).

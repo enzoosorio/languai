@@ -10,12 +10,14 @@ export const colors = {
   dark: {
     // Base
     background:    '#0C0D0B',                    // negro neutro cálido — NO verde bosque
-    // Glass surfaces (siempre derivadas de blanco puro)
-    surfaceGhost:  'rgba(255, 255, 255, 0.02)',  // nav pills, swipe panels
-    surfaceSoft:   'rgba(255, 255, 255, 0.47)',  // cards, chat bubbles
-    surfaceStrong: 'rgba(255, 255, 255, 0.75)',  // YouTube card, modales clave
-    // Compatibilidad legado (mapean a surfaceSoft)
-    surface:       'rgba(255, 255, 255, 0.47)',
+    // Glass surfaces FLAT (sin BlurView detrás — fallback / chips / inputs)
+    // En dark se derivan de blanco a BAJA opacidad: blanco alto sobre #0C0D0B
+    // produce superficie casi blanca y mata el contraste del texto crema (UI.A.12).
+    surfaceGhost:  'rgba(255, 255, 255, 0.04)',  // nav pills, swipe panels
+    surfaceSoft:   'rgba(255, 255, 255, 0.10)',  // chips, inputs, botones de modal
+    surfaceStrong: 'rgba(255, 255, 255, 0.16)',  // superficies flat de alto foco
+    // Compatibilidad legado (mapea a surfaceSoft)
+    surface:       'rgba(255, 255, 255, 0.10)',
     surfaceSolid:  '#1A1A18',
     // Text
     text:          '#F0EDE6',                    // crema cálido
@@ -66,24 +68,91 @@ export const colors = {
 } as const;
 
 // ─── GLASS TIERS ─────────────────────────────────────────────────────────────
+// Fuente ÚNICA de verdad para GlassCard y GlassFill. Ambos componentes leen de
+// aquí vía resolveGlass() — no hay magic numbers de blur duplicados (UI.A.10).
+//
 // Máximo 2 tiers distintos por pantalla. Nunca el mismo tier apilado.
 // Ver: crafting/DESIGN_SYSTEM.md § 4
+//
+// `blur` es per-mode: en dark el BlurView necesita más intensidad para leerse.
+// Los valores son `intensity` de expo-blur (no px de CSS backdrop-filter).
+
+interface GlassTierDef {
+  blur:   { dark: number; light: number };
+  fill:   { dark: string; light: string };
+  border: { dark: string; light: string };
+}
 
 export const glass = {
+  // Casi invisible — nav pills, swipe panels
   ghost: {
-    blur:   12,
-    fill:   'rgba(255, 255, 255, 0.02)',
-    border: 'rgba(255, 255, 255, 0.14)',
+    blur:   { dark: 8,  light: 6  },
+    fill:   { dark: 'rgba(255,255,255,0.02)', light: 'rgba(255,255,255,0.02)' },
+    border: { dark: 'rgba(255,255,255,0.14)', light: 'rgba(255,255,255,0.14)' },
   },
+  // Cards de historial, burbujas de chat, cards estándar
   soft: {
-    blur:   16,
-    fill:   'rgba(255, 255, 255, 0.47)',
-    border: 'rgba(255, 255, 255, 0.56)',
+    blur:   { dark: 20, light: 16 },
+    fill:   { dark: 'rgba(255,255,255,0.47)', light: 'rgba(255,255,255,0.47)' },
+    border: { dark: 'rgba(255,255,255,0.56)', light: 'rgba(255,255,255,0.56)' },
   },
+  // Tier intermedio (UI.A.7) — scenario card de Roleplay (Figma 65:1830)
+  medium: {
+    blur:   { dark: 30, light: 38 },
+    fill:   { dark: 'rgba(255,255,255,0.56)', light: 'rgba(255,255,255,0.56)' },
+    border: { dark: 'rgba(255,255,255,0.74)', light: 'rgba(255,255,255,0.74)' },
+  },
+  // Card YouTube URL, modales, elementos de alto foco
   strong: {
-    blur:   27,
-    fill:   'rgba(255, 255, 255, 0.75)',
-    border: 'rgba(255, 255, 255, 0.74)',
+    blur:   { dark: 40, light: 32 },
+    fill:   { dark: 'rgba(255,255,255,0.75)', light: 'rgba(255,255,255,0.75)' },
+    border: { dark: 'rgba(255,255,255,0.74)', light: 'rgba(255,255,255,0.74)' },
+  },
+  // Frost translúcido — header btns, mic, YT pill. Deja pasar el blob borroso
+  // detrás (la "vida" visual). Único tier con fill mode-aware real: en light
+  // tinta de negro para no lavarse contra el fondo claro.
+  frost: {
+    blur:   { dark: 36, light: 48 },
+    fill:   { dark: 'rgba(255,255,255,0.12)', light: 'rgba(0,0,0,0.08)' },
+    border: { dark: 'rgba(255,255,255,0.22)', light: 'rgba(0,0,0,0.12)' },
+  },
+} as const satisfies Record<string, GlassTierDef>;
+
+export type GlassResolved = { blur: number; fill: string; border: string };
+
+/**
+ * Resuelve un tier de glass para el modo actual.
+ * Único punto de acceso — GlassCard y GlassFill lo usan para no duplicar valores.
+ */
+export function resolveGlass(tier: keyof typeof glass, isDark: boolean): GlassResolved {
+  const t    = glass[tier];
+  const mode = isDark ? 'dark' : 'light';
+  return { blur: t.blur[mode], fill: t.fill[mode], border: t.border[mode] };
+}
+
+// ─── GLASS ELEVATION — "el efecto" liquid glass (UI.A.11) ─────────────────────
+// RN no soporta box-shadow inset. Aproximamos la lectura 3D del Figma
+// (frames 53:343, 53:349) con drop shadow exterior + highlight de borde superior.
+// Aplicado vía prop `elevated` en GlassCard. El highlight se pinta como un
+// borde claro extra; la sombra da el "flota sobre el fondo".
+
+export const glassElevation = {
+  dark: {
+    shadowColor:   '#000',
+    shadowOffset:  { width: 0, height: 12 },
+    shadowOpacity: 0.45,
+    shadowRadius:  24,
+    elevation:     16,
+    // highlight superior (simula el inset blanco del Figma)
+    topHighlight:  'rgba(255,255,255,0.35)',
+  },
+  light: {
+    shadowColor:   'rgba(60,60,60,0.40)',
+    shadowOffset:  { width: 0, height: 12 },
+    shadowOpacity: 0.30,
+    shadowRadius:  24,
+    elevation:     12,
+    topHighlight:  'rgba(255,255,255,0.85)',
   },
 } as const;
 
@@ -202,14 +271,46 @@ export const radius = {
   circle: 9999, // botón mic, avatares
 } as const;
 
-// ─── BLOB ─────────────────────────────────────────────────────────────────────
+// ─── MESH GRADIENT BACKGROUND ──────────────────────────────────────────────────
+// Fondo ambiental GPU-compuesto (expo-mesh-gradient). Reemplaza el blob SVG
+// (costura rectangular del blur) y las membranas ElasticSVG (reacción al swipe).
+// Ver: crafting/DESIGN_SYSTEM.md § 6
+//
+// Grid 3×3 = 9 vértices, espacio normalizado 0..1. Las paletas tienen 9 colores
+// (uno por vértice). Las esquinas se mantienen cerca de `background` para no lavar
+// el contenido/glass que va encima; el sage/olive vive en el centro y mid-edges.
 
-export const blob = {
-  sizeFactor:     0.85,  // 85% del ancho de pantalla — más presente, sigue ambiental
-  scaleTo:        1.04,  // amplitude del breath loop (era 1.06 — suavizado)
-  durationMs:     8000,  // duración de cada fase del loop
-  blurRadius:     200,   // px de blur de halo (simulado via filter en SVG)
-} as const;
+export const meshGradient = {
+  columns: 3,
+  rows:    3,
+  // Paletas theme-aware (9 colores, fila por fila):
+  //   [ TL,  T,  TR ]
+  //   [  L,  C,   R ]
+  //   [ BL,  B,  BR ]
+  dark: [
+    '#0C0D0B', '#14160F', '#0C0D0B',   // background → sutil cálido → background
+    '#1B2410', '#2E3B14', '#141A0C',   // sage profundo → olive (centro) → sage tenue
+    '#0C0D0B', '#10130C', '#0C0D0B',
+  ],
+  light: [
+    '#FAFAF7', '#F2F4E8', '#FAFAF7',
+    '#EDF1DE', '#D2E0AC', '#EDF1DE',   // verde concentrado en el centro, lados tenues
+    '#FAFAF7', '#F2F4E8', '#FAFAF7',
+  ],
+  // Órbita ambiental — los vértices centrales describen un círculo lento (sin/cos).
+  driftAmplitude:  0.26,  // ± en espacio del mesh (0..1) — perceptible a ojo humano
+  driftDurationMs: 9000,  // vuelta completa de la órbita
+  // Lean por swipe — cuánto se inclina el mesh hacia el drag (espacio del mesh).
+  swipeLeanMax:    0.55,
+} as const satisfies {
+  columns: number;
+  rows: number;
+  dark: string[];
+  light: string[];
+  driftAmplitude: number;
+  driftDurationMs: number;
+  swipeLeanMax: number;
+};
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 

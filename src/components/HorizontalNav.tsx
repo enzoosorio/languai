@@ -2,8 +2,9 @@
  * HorizontalNav — reemplaza PagerView con navegación elástica nativa
  *
  * Tres pantallas montadas side-by-side [Roleplay | Home | SRS].
- * El track se mueve con translateX; las membranas ElasticSVG deforman
- * los bordes mientras el dedo arrastra.
+ * El track se mueve con translateX; el fondo MeshBackground (a nivel de App)
+ * se inclina hacia el swipe leyendo los shared values meshSwipeX/meshTouchY
+ * que este componente escribe durante el gesto.
  *
  * Física:
  *  - Spring snap (damping 25, stiffness 250)
@@ -11,7 +12,7 @@
  *  - Umbral de commit: 38% de ancho o velocidad > 800 dp/s
  *  - Hápticos: light al iniciar, medium al pasar el umbral
  *
- * Spec: crafting/ELASTIC_UI.md
+ * Spec: crafting/ELASTIC_UI.md (membrana SVG superseded — ver banner del doc)
  */
 import React, {
   forwardRef,
@@ -23,13 +24,12 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
-  useDerivedValue,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { useTheme } from '../hooks/useTheme';
-import { ElasticSVG } from './ElasticSVG';
+import { useFocusStore, selectSwipeLocked } from '../stores/useFocusStore';
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 export interface HorizontalNavRef {
@@ -40,6 +40,17 @@ interface HorizontalNavProps {
   children: React.ReactNode;
   /** Página inicial (0-based). Default: 1 (Home) */
   initialPage?: number;
+  /**
+   * Nivel de focus del Home:
+   *   0 = normal  — swipe habilitado
+   *   1 = parcial — swipe bloqueado
+   *   2 = completo — swipe bloqueado
+   */
+  focusLevel?: 0 | 1 | 2;
+  /** Reacción del fondo mesh al swipe — escrito por el gesto (normalizado ~[-1,1]). */
+  meshSwipeX?: SharedValue<number>;
+  /** Y del dedo normalizada [0,1] — el fondo mesh inclina su peso vertical. */
+  meshTouchY?: SharedValue<number>;
 }
 
 // ── Constantes ─────────────────────────────────────────────────────────────────
@@ -55,9 +66,14 @@ function hapticMedium() { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium
 
 // ── Componente ─────────────────────────────────────────────────────────────────
 export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
-  function HorizontalNav({ children, initialPage = 1 }, ref) {
+  function HorizontalNav(
+    { children, initialPage = 1, focusLevel = 0, meshSwipeX, meshTouchY },
+    ref,
+  ) {
     const { width, height } = useWindowDimensions();
-    const { isDark } = useTheme();
+
+    // Lock de swipe vía focus store (SRS en sesión, etc.) además del focusLevel del Home.
+    const swipeLocked = useFocusStore(selectSwipeLocked);
 
     const pages     = Children.toArray(children);
     // Número de páginas como primitivo — los worklets de Gesture Handler
@@ -70,19 +86,15 @@ export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
     const baseOffset  = useSharedValue(-(initialPage * width));   // offset del snap actual
     const offsetX     = useSharedValue(-(initialPage * width));   // offset animado del track
     const translationX = useSharedValue(0);                       // delta desde baseOffset
-    const touchY       = useSharedValue(height * 0.5);            // Y del dedo para el bezier
     const pastThreshold = useSharedValue(false);
-
-    // Cuánto estirar cada membrana (siempre ≥ 0)
-    const leftPullX  = useDerivedValue(() => Math.max(0,  translationX.get()));
-    const rightPullX = useDerivedValue(() => Math.max(0, -translationX.get()));
 
     // ── Gesto pan ──────────────────────────────────────────────────────────────
     const gesture = Gesture.Pan()
+      .enabled(focusLevel === 0 && !swipeLocked)   // bloqueado en focus parcial/completo o enfoque global
       .activeOffsetX([-ACTIVE_OFFSET_X, ACTIVE_OFFSET_X])
       .onBegin((e) => {
         'worklet';
-        touchY.set(e.absoluteY);
+        meshTouchY?.set(e.absoluteY / height);
         pastThreshold.set(false);
       })
       .onStart(() => {
@@ -107,7 +119,10 @@ export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
 
         offsetX.set(clamped);
         translationX.set(clamped - baseOffset.get());
-        touchY.set(e.absoluteY);
+
+        // Reacción del fondo mesh — se inclina hacia el drag (normalizado).
+        meshSwipeX?.set((clamped - baseOffset.get()) / width);
+        meshTouchY?.set(e.absoluteY / height);
 
         // Háptico al cruzar el umbral de commit
         if (Math.abs(clamped - baseOffset.get()) > width * SNAP_THRESHOLD && !pastThreshold.get()) {
@@ -133,6 +148,8 @@ export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
 
         offsetX.set(withSpring(targetOffset, { ...SPRING_CONFIG, velocity: e.velocityX }));
         translationX.set(withSpring(0, SPRING_CONFIG));
+        // El lean del fondo mesh vuelve a 0 de forma continua con el snap.
+        meshSwipeX?.set(withSpring(0, SPRING_CONFIG));
       });
 
     // ── Estilo animado del track ───────────────────────────────────────────────
@@ -148,6 +165,7 @@ export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
         baseOffset.set(targetOffset);
         offsetX.set(withSpring(targetOffset, SPRING_CONFIG));
         translationX.set(withSpring(0, SPRING_CONFIG));
+        meshSwipeX?.set(withSpring(0, SPRING_CONFIG));
       },
     }));
 
@@ -166,11 +184,6 @@ export const HorizontalNav = forwardRef<HorizontalNavRef, HorizontalNavProps>(
             {pages.map((child, i) => (
               <View key={i} style={{ width, height: '100%' }}>
                 {child}
-                {/* Membranas elásticas — dentro de cada página, se mueven con ella */}
-                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                  <ElasticSVG side="left"  pullX={leftPullX}  touchY={touchY} isDark={isDark} />
-                  <ElasticSVG side="right" pullX={rightPullX} touchY={touchY} isDark={isDark} />
-                </View>
               </View>
             ))}
           </Animated.View>

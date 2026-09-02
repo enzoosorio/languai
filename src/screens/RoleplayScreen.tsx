@@ -11,7 +11,7 @@ export const RoleplayScreen: React.FC<Props> = ({ onNavigateHome }) => {
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <GlassCard tier="soft" style={styles.card}>
         <Text style={[styles.title, { color: colors.text }]}>Roleplay Session</Text>
         <Text style={{ color: colors.textMuted, marginBottom: 20 }}>

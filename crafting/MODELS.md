@@ -48,7 +48,7 @@ Documento único de verdad para qué modelo usa cada parte del pipeline de Langu
 
 **Cuándo cambiar:** si la accuracy del feedback baja del 90% en validación manual, evaluar Claude Sonnet 4.5 vía API directa. Costo extra estimado: $0.005-0.01 por sesión.
 
-**Variable a tocar:** `LLM_FEEDBACK_MODEL`, `LLM_JUDGE_MODEL`.
+**Variable a tocar:** `FEEDBACK_MODEL` (alias aceptado: `LLM_FEEDBACK_MODEL`), `LLM_JUDGE_MODEL`.
 
 ---
 

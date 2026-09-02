@@ -14,23 +14,28 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { Audio } from 'expo-av';
+import type { AVPlaybackStatus } from 'expo-av';
 import * as Haptics from 'expo-haptics';
-// Reanimated — keyboard sync con shared values (evita race con runtime init)
+// Reanimated — keyboard sync + focus animations
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
+  withTiming,
+  FadeInUp,
+  FadeOutDown,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 import { useVoiceRecording } from '../hooks/useVoiceRecording';
 import { useUserStore } from '../stores/useUserStore';
 import { useSessionStore } from '../stores/useSessionStore';
+import { useFocusStore } from '../stores/useFocusStore';
 import { transcribe } from '../services/stt';
 import { speak } from '../services/tts';
 import { saveOnboarding } from '../services/settings';
 import { supabase } from '../lib/supabase';
+import { GlassFill } from '../components/GlassFill';
 
 // ── Constantes de diseño ───────────────────────────────────────────────────────
 const MIC_SIZE          = 159;   // Figma spec: squircle 159×159
@@ -39,12 +44,16 @@ const HEADER_BTN_SIZE   = 44;
 const HEADER_BTN_RADIUS = 14;
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
-type VoiceStatus = 'idle' | 'listening' | 'processing' | 'speaking';
+// 'preparing' = el texto de la IA ya llegó, pero el audio todavía se está
+// generando (TTS + descarga + carga del Sound). Antes este tramo se marcaba
+// como 'speaking' y la UI mentía durante 4-5 segundos.
+type VoiceStatus = 'idle' | 'listening' | 'processing' | 'preparing' | 'speaking';
 
 const HINT_TEXT: Record<VoiceStatus, string> = {
   idle:       'Tap to speak',
   listening:  'Listening… tap to send',
   processing: 'Processing…',
+  preparing:  'Preparing voice…',
   speaking:   'Speaking…',
 };
 
@@ -52,8 +61,15 @@ const MIC_ICON: Record<VoiceStatus, React.ComponentProps<typeof Ionicons>['name'
   idle:       'mic',
   listening:  'stop',
   processing: 'hourglass-outline',
+  preparing:  'sync-outline',
   speaking:   'radio-outline',
 };
+
+/**
+ * Si el audio nunca llega a sonar, el mic queda deshabilitado y el swipe
+ * bloqueado indefinidamente. Este techo garantiza volver siempre a 'idle'.
+ */
+const PREPARING_WATCHDOG_MS = 25000;
 
 const TARGET_LANGUAGES = [
   { code: 'en', label: 'English', flag: '🇺🇸' },
@@ -66,43 +82,11 @@ interface Props {
   onNavigateRoleplay: () => void;
   onNavigateSRS: () => void;
   onToggleTheme: () => void;
+  /** Notifica al padre el nivel de focus para que bloquee el swipe y las membranas */
+  onFocusChange: (level: 0 | 1 | 2) => void;
+  /** Abre SessionClosingScreen — llamado cuando la sesión termina normalmente (task 3.7.7) */
+  onSessionClosing: () => void;
 }
-
-// ── GlassLayers ───────────────────────────────────────────────────────────────
-// BlurView intenso (36/48) + fill semi-transparente + sombra exterior.
-// El parent DEBE tener overflow:'hidden' y el borderRadius correspondiente.
-interface GlassLayersProps {
-  isDark:        boolean;
-  fillAlpha?:    number;   // override del fill semi-transparente
-  blurIntensity?: number;  // override de la intensidad del blur
-}
-const GlassLayers: React.FC<GlassLayersProps> = ({
-  isDark,
-  fillAlpha,
-  blurIntensity,
-}) => {
-  const intensity = blurIntensity ?? (isDark ? 36 : 48);
-  const darkFill  = `rgba(255,255,255,${fillAlpha ?? 0.12})`;
-  const lightFill = `rgba(0,0,0,${fillAlpha ?? 0.08})`;
-  return (
-    <>
-      {/* Blur de fondo — efecto humo/glass */}
-      <BlurView
-        intensity={intensity}
-        tint={isDark ? 'dark' : 'light'}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      {/* Fill semi-transparente sobre el blur */}
-      <View
-        style={[StyleSheet.absoluteFill, {
-          backgroundColor: isDark ? darkFill : lightFill,
-        }]}
-        pointerEvents="none"
-      />
-    </>
-  );
-};
 
 // ── HeaderBtnBorder ───────────────────────────────────────────────────────────
 // Borde glass theme-aware renderizado por encima del BlurView.
@@ -125,12 +109,18 @@ export const HomeScreen: React.FC<Props> = ({
   onNavigateRoleplay: _onNavigateRoleplay,
   onNavigateSRS: _onNavigateSRS,
   onToggleTheme,
+  onFocusChange,
+  onSessionClosing,
 }) => {
   const { isDark, colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { user, settings, loadSettings } = useUserStore();
   const { startRecording, stopRecording } = useVoiceRecording();
-  const { isActive, startSession, persistTurn, endSession } = useSessionStore();
+  const {
+    isActive, turnIndex,
+    startSession, persistTurn, endSession,
+    pendingClose, setEndRequested, setPendingClose,
+  } = useSessionStore();
 
   const lang  = settings?.active_language ?? 'en';
   const level = settings?.active_level    ?? 'B1';
@@ -138,6 +128,112 @@ export const HomeScreen: React.FC<Props> = ({
   // ── Estado ─────────────────────────────────────────────────────────────────
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>('idle');
   const activeSoundRef = useRef<Audio.Sound | null>(null);
+  const watchdogRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+
+  // ── Saneamiento de la máquina de estados de voz ─────────────────────
+  const clearWatchdog = () => {
+    if (!watchdogRef.current) return;
+    clearTimeout(watchdogRef.current);
+    watchdogRef.current = null;
+  };
+
+  const armWatchdog = () => {
+    clearWatchdog();
+    watchdogRef.current = setTimeout(() => {
+      console.warn('[Voice] audio never started — resetting state machine');
+      watchdogRef.current = null;
+      setVoiceStatus('idle');
+    }, PREPARING_WATCHDOG_MS);
+  };
+
+  /** Corta y descarga la voz de la IA en curso. Idempotente. */
+  const stopActiveSound = async () => {
+    const sound = activeSoundRef.current;
+    activeSoundRef.current = null;
+    if (!sound) return;
+    try {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+    } catch (err) {
+      console.warn('[Voice] stopActiveSound error:', err);
+    }
+  };
+
+  /**
+   * Único camino de cierre CON feedback. Antes cada callsite llamaba a
+   * onSessionClosing() directamente sin resetear voiceStatus: como focusLevel
+   * deriva de él, la app quedaba congelada en "Speaking…" con el mic
+   * deshabilitado y el swipe bloqueado, y el audio seguía sonando.
+   */
+  const closeSession = async () => {
+    clearWatchdog();
+    setVoiceStatus('idle');
+    await stopActiveSound();
+    onSessionClosing();
+  };
+
+  /** Descartar SIN feedback. Mismo saneamiento que closeSession. */
+  const discardSession = async () => {
+    clearWatchdog();
+    setVoiceStatus('idle');
+    await stopActiveSound();
+    await endSession();
+  };
+
+  // Al desmontar: ni timers ni audio huérfanos.
+  useEffect(() => {
+    return () => {
+      clearWatchdog();
+      void stopActiveSound();
+    };
+  }, []);
+
+  // ── Focus level (derivado — no es estado independiente) ────────────────────
+  // 0 = normal (idle, sin sesión) | 1 = parcial (grabando/procesando primer turno)
+  // 2 = completo (sesión activa — después de la 1ª respuesta de la IA persistida)
+  const focusLevel: 0 | 1 | 2 = isActive ? 2 : voiceStatus !== 'idle' ? 1 : 0;
+
+  // ── Shared values — YouTube pill (fade + scale + drop) ────────────────────
+  const ytFocusOpacity = useSharedValue(1);
+  const ytFocusScale   = useSharedValue(1);
+  const ytFocusTY      = useSharedValue(0);
+  const ytFocusStyle   = useAnimatedStyle(() => ({
+    opacity:   ytFocusOpacity.get(),
+    transform: [
+      { scale:      ytFocusScale.get() },
+      { translateY: ytFocusTY.get()    },
+    ],
+  }));
+
+  // ── Shared value — ambient vignette (foco parcial y completo) ──────────────
+  const ambientOpacity = useSharedValue(0);
+  const ambientStyle   = useAnimatedStyle(() => ({ opacity: ambientOpacity.get() }));
+
+  useEffect(() => {
+    // Notificar al padre (bloquea swipe + membranas de HorizontalNav)
+    onFocusChange(focusLevel);
+
+    // Enfoque global (vignette de bordes + lock de swipe vía store)
+    if (focusLevel !== 0) useFocusStore.getState().acquire('home');
+    else                  useFocusStore.getState().release('home');
+
+    const toFull = focusLevel === 2;
+
+    // YouTube pill: fade + scale + slight drop
+    ytFocusOpacity.set(withTiming(toFull ? 0   : 1,  { duration: 350 }));
+    ytFocusScale.set(  withTiming(toFull ? 0.88: 1,  { duration: 350 }));
+    ytFocusTY.set(     withTiming(toFull ? 10  : 0,  { duration: 350 }));
+
+    // Ambient vignette: tenue en focus 1 (grabando), visible en focus 2 (sesión activa)
+    ambientOpacity.set(withTiming(
+      focusLevel === 2 ? 0.28 : focusLevel === 1 ? 0.10 : 0,
+      { duration: 350 },
+    ));
+  }, [focusLevel]);
+
+  // Liberar el enfoque global si la pantalla se desmonta en foco
+  useEffect(() => () => { useFocusStore.getState().release('home'); }, []);
 
   const [ytUrl,       setYtUrl]       = useState('');
   const [showPicker,  setShowPicker]  = useState(false);
@@ -256,38 +352,130 @@ export const HomeScreen: React.FC<Props> = ({
       setVoiceStatus('processing');
       const userText = await transcribe(result.uri, lang);
 
+      // ── 3.7.6: pendingClose (soft close) ───────────────────────────────────
+      // El LLM señaló posible cierre en el turno anterior (confidence 0.50–0.84).
+      // Si el usuario responde con < 5 palabras lo tratamos como confirmación.
+      if (pendingClose) {
+        const wordCount = userText.trim().split(/\s+/).filter(Boolean).length;
+        if (wordCount < 5) {
+          persistTurn('user', userText);
+          setPendingClose(false);
+          await closeSession();
+          return;
+        }
+        // ≥ 5 palabras → el usuario sigue hablando; continúa la conversación
+        setPendingClose(false);
+      }
+
       if (!isActive) await startSession(lang, level, 'free');
       const currentSessionId = useSessionStore.getState().sessionId;
-      persistTurn('user', userText);
 
+      // IMPORTANTE: persistTurn del usuario se llama DESPUÉS de chat-turn.
+      // chat-turn lee el historial de la DB → si persistimos antes hay race condition
+      // con el insert fire-and-forget. Persistiendo después, la query de historial
+      // lee exactamente los turnos anteriores sin incluir el actual.
       const { data, error } = await supabase.functions.invoke('chat-turn', {
         body: { session_id: currentSessionId ?? 'no-session', user_text: userText, lang, level },
       });
       if (error || !data?.ai_text) throw new Error(error?.message ?? 'No response from AI');
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setVoiceStatus('speaking');
+      // Persistir turno del usuario y respuesta IA (fire-and-forget, no bloquea el audio)
+      persistTurn('user', userText);
+      persistTurn('ai', data.ai_text);
 
-      if (activeSoundRef.current) {
-        await activeSoundRef.current.stopAsync();
-        await activeSoundRef.current.unloadAsync();
-        activeSoundRef.current = null;
+      // ── 3.7.5: Leer tool_calls — ¿el LLM quiere cerrar la conversación? ────
+      const toolCalls: unknown[] = data.tool_calls ?? [];
+      for (const tc of toolCalls) {
+        const call = tc as { function?: { name?: string; arguments?: string } };
+        if (call.function?.name === 'end_conversation') {
+          try {
+            const args = JSON.parse(call.function.arguments ?? '{}') as {
+              confidence?: number;
+            };
+            const confidence = args.confidence ?? 0;
+            if (confidence >= 0.85) {
+              // Hard close: sesión termina al acabar el audio de despedida
+              setEndRequested(true);
+            } else if (confidence >= 0.50) {
+              // Soft close: espera confirmación del usuario en el próximo turno
+              setPendingClose(true);
+            }
+          } catch {
+            console.warn('[HomeScreen] end_conversation args parse error');
+          }
+        }
       }
 
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // 'preparing', no 'speaking': entre aquí y el primer frame audible hay un
+      // POST a OpenAI, un base64 en el JS thread, una escritura a disco y la
+      // carga del Sound — 4-5 s en los que antes la UI mentía.
+      setVoiceStatus('preparing');
+      armWatchdog();
+
+      await stopActiveSound();
+
       const audioPath = await speak(data.ai_text, lang);
-      const { sound } = await Audio.Sound.createAsync({ uri: audioPath });
-      activeSoundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync();
-          activeSoundRef.current = null;
-          setVoiceStatus('idle');
-        }
+
+      // El audio debe sonar aunque el switch de silencio del iPhone esté puesto.
+      // stopRecording() deja el modo en allowsRecordingIOS:false y hay que
+      // reafirmar playsInSilentModeIOS antes de reproducir.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS:   false,
+        playsInSilentModeIOS: true,
       });
-      await sound.playAsync();
-      persistTurn('ai', data.ai_text);
+
+      let started = false;
+      const onStatus = (status: AVPlaybackStatus) => {
+        if (!status.isLoaded) {
+          // Estado zombie: sin este guard, un fallo de carga dejaba voiceStatus
+          // en 'speaking' para siempre con el mic deshabilitado.
+          if (status.error) {
+            console.warn('[Voice] playback error:', status.error);
+            clearWatchdog();
+            activeSoundRef.current = null;
+            setVoiceStatus('idle');
+          }
+          return;
+        }
+
+        // ESTE es el único punto en el que la IA está hablando de verdad.
+        if (status.isPlaying && !started) {
+          started = true;
+          clearWatchdog();
+          setVoiceStatus('speaking');
+        }
+
+        if (status.didJustFinish) {
+          clearWatchdog();
+          void activeSoundRef.current?.unloadAsync();
+          activeSoundRef.current = null;
+          // ── 3.7.5: Si el LLM pidió cierre hard, abre SessionClosingScreen ──
+          if (useSessionStore.getState().endRequested) {
+            setEndRequested(false);
+            void closeSession();
+          } else {
+            setVoiceStatus('idle');
+          }
+        }
+      };
+
+      // El callback va como TERCER argumento, no vía setOnPlaybackStatusUpdate
+      // después: con shouldPlay:true la reproducción arranca dentro de
+      // createAsync, y un clip corto podía terminar antes de que lo adjuntáramos
+      // — perdiendo didJustFinish y dejando la sesión sin cerrar.
+      // shouldPlay:true además sustituye a playAsync(), que resolvía al aceptar
+      // la orden y no en el primer frame audible.
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioPath },
+        { shouldPlay: true },
+        onStatus,
+      );
+      activeSoundRef.current = sound;
     } catch (err) {
       console.warn('[Voice] Error:', err);
+      clearWatchdog();
       setVoiceStatus('idle');
     }
   };
@@ -305,6 +493,21 @@ export const HomeScreen: React.FC<Props> = ({
     } finally {
       setSavingLang(false);
     }
+  };
+
+  // ── Handlers de focus mode ────────────────────────────────────────────────
+  const handleBack = () => {
+    if (turnIndex >= 2) {
+      setShowDiscardModal(true);
+    } else {
+      // Menos de 1 intercambio completo → descartar sin modal
+      void discardSession();
+    }
+  };
+
+  const handleDiscardConfirm = async () => {
+    setShowDiscardModal(false);
+    await discardSession();
   };
 
   // ── Derivados ──────────────────────────────────────────────────────────────
@@ -342,21 +545,33 @@ export const HomeScreen: React.FC<Props> = ({
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <View style={[styles.header, { top: insets.top + 12 }]}>
 
-          {/* Izquierda: settings → lang/level picker */}
-          <TouchableOpacity
-            style={[styles.headerBtn, styles.headerBtnShadow, { overflow: 'hidden' }]}
-            onPress={() => setShowPicker(true)}
-            activeOpacity={0.75}
-          >
-            <GlassLayers isDark={isDark} />
-            <HeaderBtnBorder isDark={isDark} />
-            <Ionicons name="settings-outline" size={18} color={colors.text} />
-          </TouchableOpacity>
+          {/* Izquierda: Back ← en focus completo | Settings en idle */}
+          {focusLevel === 2 ? (
+            <TouchableOpacity
+              style={[styles.headerBtn, styles.headerBtnShadow, { overflow: 'hidden' }]}
+              onPress={handleBack}
+              activeOpacity={0.75}
+            >
+              <GlassFill isDark={isDark} />
+              <HeaderBtnBorder isDark={isDark} />
+              <Ionicons name="arrow-back" size={18} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.headerBtn, styles.headerBtnShadow, { overflow: 'hidden' }]}
+              onPress={() => setShowPicker(true)}
+              activeOpacity={0.75}
+            >
+              <GlassFill isDark={isDark} />
+              <HeaderBtnBorder isDark={isDark} />
+              <Ionicons name="settings-outline" size={18} color={colors.text} />
+            </TouchableOpacity>
+          )}
 
           {/* Derecha: racha + theme toggle */}
           <View style={styles.headerRight}>
             <View style={[styles.headerBtn, styles.headerBtnShadow, { overflow: 'hidden' }]}>
-              <GlassLayers isDark={isDark} />
+              <GlassFill isDark={isDark} />
               <HeaderBtnBorder isDark={isDark} />
               <Text style={[styles.streakNumber, { color: colors.text }]}>3</Text>
             </View>
@@ -366,7 +581,7 @@ export const HomeScreen: React.FC<Props> = ({
               onPress={onToggleTheme}
               activeOpacity={0.75}
             >
-              <GlassLayers isDark={isDark} />
+              <GlassFill isDark={isDark} />
               <HeaderBtnBorder isDark={isDark} />
               <Ionicons
                 name={isDark ? 'sunny-outline' : 'moon-outline'}
@@ -407,7 +622,11 @@ export const HomeScreen: React.FC<Props> = ({
                   onPressOut={() =>
                     Animated.spring(micPressScale, { toValue: 1.0, useNativeDriver: true, speed: 20, bounciness: 8 }).start()
                   }
-                  disabled={voiceStatus === 'processing' || voiceStatus === 'speaking'}
+                  disabled={
+                    voiceStatus === 'processing' ||
+                    voiceStatus === 'preparing'  ||
+                    voiceStatus === 'speaking'
+                  }
                   activeOpacity={1}
                   style={[
                     styles.micSquircle,
@@ -420,7 +639,7 @@ export const HomeScreen: React.FC<Props> = ({
                   ]}
                 >
                   {/* Glass — blur fuerte + fill más opaco para el mic */}
-                  <GlassLayers
+                  <GlassFill
                     isDark={isDark}
                     fillAlpha={
                       voiceStatus === 'listening'
@@ -455,24 +674,17 @@ export const HomeScreen: React.FC<Props> = ({
           </View>
         </Reanimated.View>
 
-        {/* ── End session ──────────────────────────────────────────────────── */}
-        {isActive && (
-          <TouchableOpacity
-            style={[
-              styles.endBtn,
-              { backgroundColor: colors.danger + '26', borderColor: colors.danger + '55' },
-            ]}
-            onPress={endSession}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.endBtnText, { color: colors.danger }]}>End session</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* ── YouTube URL — sube por la altura completa del teclado ─────────── */}
-        <Reanimated.View style={[styles.ytContainer, { bottom: 20 + insets.bottom }, ytKeyboardStyle]}>
+        {/* ── YouTube URL — sube con teclado, desaparece en focus completo ──── */}
+        {/* En focus completo solo baja a opacity 0: sigue MONTADA y sigue siendo
+            táctil, y con elevation 8 gana el hit-testing al botón End, que ocupa
+            exactamente el mismo `bottom`. Sin este pointerEvents el tap cae en el
+            TextInput invisible. */}
+        <Reanimated.View
+          pointerEvents={focusLevel === 2 ? 'none' : 'auto'}
+          style={[styles.ytContainer, { bottom: 20 + insets.bottom }, ytKeyboardStyle, ytFocusStyle]}
+        >
           {/* Glass */}
-          <GlassLayers isDark={isDark} />
+          <GlassFill isDark={isDark} />
           {/* Border overlay */}
           <View
             style={[StyleSheet.absoluteFill, {
@@ -508,6 +720,85 @@ export const HomeScreen: React.FC<Props> = ({
             </TouchableOpacity>
           )}
         </Reanimated.View>
+
+        {/* ── Ambient vignette — foco parcial (0.10) y completo (0.28) ────── */}
+        {/* Renderizado ANTES del botón End para que éste quede sobre el scrim */}
+        {/* pointerEvents="none" → nunca intercepta toques                     */}
+        <Reanimated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, styles.ambientScrim, ambientStyle]}
+        />
+
+        {/* ── End conversation (focus completo) ────────────────────────────── */}
+        {/* Renderizado DESPUÉS del scrim → queda encima (sin oscurecer)       */}
+        {focusLevel === 2 && (
+          <Reanimated.View
+            entering={FadeInUp.duration(380).springify().damping(22)}
+            exiting={FadeOutDown.duration(220)}
+            style={[styles.endBtnWrapper, { bottom: 20 + insets.bottom }]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.endBtn,
+                {
+                  backgroundColor: colors.accent + '28',
+                  borderColor:     colors.accent + '70',
+                  overflow:        'hidden',
+                },
+              ]}
+              onPress={closeSession}
+              activeOpacity={0.75}
+            >
+              <GlassFill isDark={isDark} fillAlpha={0.06} blurIntensity={isDark ? 20 : 28} />
+              <Text style={[styles.endBtnText, { color: colors.text }]}>End conversation</Text>
+            </TouchableOpacity>
+          </Reanimated.View>
+        )}
+
+        {/* ── Modal: confirmar descarte de sesión ──────────────────────────── */}
+        <Modal
+          visible={showDiscardModal}
+          animationType="fade"
+          transparent
+          presentationStyle="overFullScreen"
+        >
+          <TouchableWithoutFeedback onPress={() => setShowDiscardModal(false)}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback onPress={() => { /* stop propagation */ }}>
+                <View style={[styles.modalSheet, { backgroundColor: colors.surfaceSolid }]}>
+                  <Text style={[styles.modalTitle, { color: colors.text, fontSize: 16 }]}>
+                    Discard this conversation?
+                  </Text>
+                  <Text style={[styles.modalLabel, {
+                    color: colors.textMuted,
+                    fontWeight: '400',
+                    letterSpacing: 0,
+                    fontSize: 13,
+                    marginBottom: 24,
+                    marginTop: 4,
+                    textTransform: 'none',
+                  }]}>
+                    Progress won't be saved.
+                  </Text>
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={[styles.modalBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                      onPress={() => setShowDiscardModal(false)}
+                    >
+                      <Text style={[styles.modalBtnText, { color: colors.text }]}>Keep talking</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalBtn, { backgroundColor: colors.danger + '22', borderColor: colors.danger + '55' }]}
+                      onPress={handleDiscardConfirm}
+                    >
+                      <Text style={[styles.modalBtnText, { color: colors.danger }]}>Discard</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
 
         {/* ── Lang / Level picker modal ─────────────────────────────────────── */}
         <Modal
@@ -596,7 +887,7 @@ export const HomeScreen: React.FC<Props> = ({
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
 
-  // Raíz — transparente para que el BackgroundBlob de App.tsx sea visible
+  // Raíz — transparente para que el MeshBackground de App.tsx sea visible
   container: {
     flex:           1,
     alignItems:     'center',
@@ -692,19 +983,33 @@ const styles = StyleSheet.create({
     opacity:       0.55,
   },
 
-  // ── End session ─────────────────────────────────────────────────────────────
+  // ── End conversation ────────────────────────────────────────────────────────
+  // Wrapper: posición absoluta + centering (Reanimated.View, gestiona enter/exit)
+  endBtnWrapper: {
+    position:  'absolute',
+    alignSelf: 'center',
+    // Comparte `bottom` con ytContainer, que tiene elevation 8. En Android la
+    // elevation gana el hit-testing, así que hay que superarla explícitamente.
+    zIndex:    10,
+    elevation: 12,
+  },
+  // Botón interno: sin posición propia, el wrapper la gestiona
   endBtn: {
-    position:          'absolute',
-    bottom:            100,
-    paddingHorizontal: 20,
-    paddingVertical:   8,
-    borderRadius:      20,
+    paddingHorizontal: 24,
+    paddingVertical:   10,
+    borderRadius:      24,
     borderWidth:       1,
   },
   endBtnText: {
     fontSize:      13,
     fontWeight:    '600',
     letterSpacing: 0.3,
+  },
+
+  // ── Ambient vignette ─────────────────────────────────────────────────────────
+  // Negro puro con opacidad animada — crea "spotlight" en el mic
+  ambientScrim: {
+    backgroundColor: '#000',
   },
 
   // ── YouTube input ────────────────────────────────────────────────────────────
